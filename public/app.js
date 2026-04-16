@@ -1,3 +1,15 @@
+const MODAL_TERMS = [
+  '<strong>Daily Allowance:</strong> You are entitled to 3 free spins per day. Your spin balance refreshes every 24 hours.',
+  '<strong>Manual Transfers:</strong> Once you initiate a transfer, your coin winnings will be processed and credited to your Dostt Wallet within 24 hours.',
+  '<strong>Grand Prize Notification:</strong> If you win a mobile device or AirPods, our team will contact you within 24 hours to coordinate fulfillment.',
+  '<strong>Shipping Logistics:</strong> Final delivery timelines for physical prizes may vary depending on your location.'
+];
+
+const RULE_CARD_ITEMS = [
+  '<strong>Daily Allowance:</strong> Enjoy 3 free spins, refreshing every 24 hours.',
+  '<strong>Wallet Transfers:</strong> Transfer is available <strong class="rules-accent">once per day</strong>.'
+];
+
 const state = {
   config: null,
   mobileNumber: localStorage.getItem('user_mobile') || '',
@@ -23,7 +35,7 @@ const elements = {
   loginForm: document.getElementById('loginForm'),
   mobileInput: document.getElementById('mobileInput'),
   spinButton: document.getElementById('spinButton'),
-  spinCooldownCard: document.getElementById('spinCooldownCard'),
+  spinCooldownBlock: document.getElementById('spinCooldownBlock'),
   spinCooldownText: document.getElementById('spinCooldownText'),
   testerPanel: document.getElementById('testerPanel'),
   forcedRewardSelect: document.getElementById('forcedRewardSelect'),
@@ -31,12 +43,12 @@ const elements = {
   resetTesterButton: document.getElementById('resetTesterButton'),
   statusDots: document.getElementById('statusDots'),
   spinsCaption: document.getElementById('spinsCaption'),
-  termsList: document.getElementById('termsList'),
-  modalTermsList: document.getElementById('modalTermsList'),
+  rulesList: document.getElementById('rulesList'),
   errorBanner: document.getElementById('errorBanner'),
   termsButton: document.getElementById('termsButton'),
   logoutButton: document.getElementById('logoutButton'),
   termsModal: document.getElementById('termsModal'),
+  modalTermsList: document.getElementById('modalTermsList'),
   closeTermsButton: document.getElementById('closeTermsButton'),
   rewardModal: document.getElementById('rewardModal'),
   rewardIcon: document.getElementById('rewardIcon'),
@@ -122,11 +134,11 @@ function formatCountdown(msRemaining) {
 function startSpinCountdown() {
   clearInterval(spinCountdownInterval);
   if (isTester() || state.spinState.spins_used < state.spinState.max_spins) {
-    elements.spinCooldownCard.classList.add('hidden');
+    elements.spinCooldownBlock.classList.add('hidden');
     return;
   }
 
-  elements.spinCooldownCard.classList.remove('hidden');
+  elements.spinCooldownBlock.classList.remove('hidden');
   spinCountdownInterval = setInterval(() => {
     const tomorrow = new Date();
     tomorrow.setHours(24, 0, 0, 0);
@@ -169,7 +181,7 @@ function renderTransferArea() {
 
   const button = document.createElement('button');
   button.className = 'transfer-chip';
-  button.textContent = state.transferring ? 'Sending...' : 'Transfer';
+  button.textContent = state.transferring ? '...' : 'Transfer';
   button.disabled = state.transferring || state.spinState.total_winnings <= 0;
   if (button.disabled) {
     button.classList.add('disabled');
@@ -179,9 +191,8 @@ function renderTransferArea() {
 }
 
 function renderTerms() {
-  const items = state.config.terms || [];
-  elements.termsList.innerHTML = items.map((term) => `<li>${term}</li>`).join('');
-  elements.modalTermsList.innerHTML = items.map((term) => `<li>${term}</li>`).join('');
+  elements.rulesList.innerHTML = RULE_CARD_ITEMS.map((item) => `<li>${item}</li>`).join('');
+  elements.modalTermsList.innerHTML = MODAL_TERMS.map((item) => `<li>${item}</li>`).join('');
 }
 
 function renderAuthState() {
@@ -191,11 +202,14 @@ function renderAuthState() {
 }
 
 function renderWheelState() {
+  const remainingSpins = Math.max(0, state.spinState.max_spins - state.spinState.spins_used);
   elements.walletCoins.textContent = state.spinState.total_winnings;
-  elements.spinsCaption.textContent = `${Math.max(0, state.spinState.max_spins - state.spinState.spins_used)} Spins ready for +${state.mobileNumber}`;
+  elements.spinsCaption.textContent = `${remainingSpins} Spins ready for +${state.mobileNumber}`;
   elements.spinButton.disabled = state.spinning || (!isTester() && state.spinState.spins_used >= state.spinState.max_spins);
-  elements.spinButton.textContent = state.spinning ? 'SPINNING...' : 'SPIN THE WHEEL';
+  elements.spinButton.innerHTML = state.spinning ? '<span class="spinner-inline"></span>' : 'SPIN THE WHEEL';
+  elements.spinButton.classList.toggle('hidden', !isTester() && state.spinState.spins_used >= state.spinState.max_spins);
   elements.testerPanel.classList.toggle('hidden', !isTester());
+  elements.resetTesterButton.classList.toggle('hidden', !isTester());
   updateStatusDots();
   renderTransferArea();
   startSpinCountdown();
@@ -211,7 +225,7 @@ async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || 'Request failed');
+    throw new Error(data.error || data.reason || 'Request failed');
   }
   return data;
 }
@@ -254,7 +268,7 @@ async function handleLogin(event) {
   event.preventDefault();
   const normalizedMobile = normalizeMobile(elements.mobileInput.value);
   if (normalizedMobile.length !== 10) {
-    showError('Please enter a valid 10-digit mobile number.');
+    showError('Please enter a valid 10-digit number');
     return;
   }
 
@@ -269,8 +283,21 @@ async function handleLogin(event) {
   await refreshState();
 }
 
+function launchConfetti() {
+  const pieces = ['🎉', '✨', '💜', '⭐'];
+  for (let index = 0; index < 16; index += 1) {
+    const particle = document.createElement('div');
+    particle.className = 'confetti-piece';
+    particle.textContent = pieces[index % pieces.length];
+    particle.style.left = `${Math.random() * 100}%`;
+    particle.style.animationDelay = `${Math.random() * 0.25}s`;
+    document.body.appendChild(particle);
+    setTimeout(() => particle.remove(), 3200);
+  }
+}
+
 async function handleSpin() {
-  if (state.spinning) {
+  if (state.spinning || (!isTester() && state.spinState.spins_used >= state.spinState.max_spins)) {
     return;
   }
 
@@ -294,28 +321,33 @@ async function handleSpin() {
     const segmentSize = 360 / sections.length;
     const extraSpins = 12 * 360;
     const landingOffset = 360 - (targetIndex * segmentSize + segmentSize / 2);
-    state.wheelRotation += extraSpins + (landingOffset - (state.wheelRotation % 360));
+    const totalRotation = state.wheelRotation + extraSpins + (landingOffset - (state.wheelRotation % 360));
+    state.wheelRotation = totalRotation;
     elements.wheelMain.style.transform = `rotate(${state.wheelRotation}deg)`;
 
     setTimeout(async () => {
       state.spinning = false;
       await refreshState();
       openRewardModal(result);
+      if (result.reward_coins > 0) {
+        launchConfetti();
+      }
     }, 5000);
   } catch (error) {
     state.spinning = false;
-    showError(error.message);
+    showError(error.message === 'daily_limit_reached' ? 'Spin limit reached for today' : error.message);
     renderWheelState();
   }
 }
 
 function openRewardModal(result) {
   const reward = state.config.wheelSections.find((item) => item.id === result.reward) || state.config.wheelSections[0];
+  const isWinner = Number(result.reward_coins) > 0;
   elements.rewardIcon.textContent = reward.icon;
-  elements.rewardTitle.textContent = reward.reward_coins > 0 ? 'Hooray!' : 'Oh No!';
-  elements.rewardDescription.textContent = reward.reward_coins > 0
-    ? `Amazing! You won ${reward.label}.`
-    : 'Better luck next time!';
+  elements.rewardTitle.textContent = isWinner ? 'Hooray!' : 'Oh No!';
+  elements.rewardDescription.innerHTML = result.reward === 'better_luck'
+    ? 'Better luck next Time!'
+    : `Amazing! You won ${reward.label}! We've added it to your wallet.`;
   elements.rewardModal.classList.remove('hidden');
 }
 
@@ -362,8 +394,9 @@ async function handleResetTester() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mobileNumber: state.mobileNumber })
     });
-    await refreshState();
-    showError('');
+    alert('RESET SUCCESSFUL! Refreshing...');
+    localStorage.removeItem('user_mobile');
+    window.location.reload();
   } catch (error) {
     showError(error.message);
   }
