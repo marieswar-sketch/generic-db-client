@@ -11,25 +11,37 @@ function getSslConfig() {
     : false;
 }
 
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL is required. Copy .env.example to .env and set it.');
+}
+
+const pool = new Pool({
+  connectionString,
+  ssl: getSslConfig()
+});
+
 export function getDbPool() {
-  const connectionString = process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is required. Copy .env.example to .env and set it.');
-  }
-
-  return new Pool({
-    connectionString,
-    ssl: getSslConfig()
-  });
+  return pool;
 }
 
 export async function runQuery(text, params = []) {
-  const pool = getDbPool();
+  return pool.query(text, params);
+}
+
+export async function runInTransaction(callback) {
+  const client = await pool.connect();
 
   try {
-    return await pool.query(text, params);
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
   } finally {
-    await pool.end();
+    client.release();
   }
 }

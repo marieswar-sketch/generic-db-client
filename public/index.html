@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dostt Spin Wheel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <div class="brand-mark">
+      <div class="brand-icon">😈</div>
+      <div class="brand-text">Dostt</div>
+    </div>
+
+    <div id="topBar" class="top-bar hidden">
+      <div class="wallet-card">
+        <div>
+          <p class="wallet-label">Total Won</p>
+          <p class="wallet-value"><span id="walletCoins">0</span> <span class="wallet-unit">Coins</span></p>
+        </div>
+        <div id="transferArea"></div>
+      </div>
+    </div>
+
+    <main class="glass-card app-card">
+      <h1 class="hero-title">SPIN <span>& WIN</span></h1>
+
+      <section id="loginView" class="view">
+        <form id="loginForm" class="login-form">
+          <div class="input-shell">
+            <input id="mobileInput" type="tel" placeholder="Enter Mobile Number" maxlength="15">
+          </div>
+          <p class="helper-text">Use your registered mobile number to check your spins and rewards.</p>
+          <button class="btn-premium" type="submit">Start Earning</button>
+        </form>
+      </section>
+
+      <section id="loadingView" class="view hidden">
+        <div class="loading-wrap">
+          <div class="spinner"></div>
+          <p>Loading your spins...</p>
+        </div>
+      </section>
+
+      <section id="wheelView" class="view hidden">
+        <div class="wheel-wrapper">
+          <div class="wheel-outer"></div>
+          <div id="wheelMain" class="wheel-main">
+            <div id="segmentLabels" class="segment-label-container"></div>
+            <div class="wheel-segment-overlay"></div>
+          </div>
+          <div class="wheel-pointer-v3"><div class="pointer-inner"></div></div>
+          <div class="wheel-center-hub"><div class="hub-avatar">🔥</div></div>
+        </div>
+
+        <div class="primary-action-wrap">
+          <button id="spinButton" class="btn-premium">SPIN THE WHEEL</button>
+          <div id="spinCooldownCard" class="cooldown-card hidden">
+            <p class="cooldown-label">Next free spin in</p>
+            <p id="spinCooldownText" class="cooldown-value">00h 00m 00s</p>
+          </div>
+        </div>
+
+        <div id="testerPanel" class="tester-panel hidden">
+          <h3>Beta Tester Panel</h3>
+          <label>
+            <span>Set Next Spin Result</span>
+            <select id="forcedRewardSelect"></select>
+          </label>
+          <label>
+            <span>Custom Transfer Amount</span>
+            <input id="customTransferInput" type="number" placeholder="Enter amount to transfer">
+          </label>
+          <button id="resetTesterButton" class="danger-button" type="button">Developer: Wipe My Database Config</button>
+        </div>
+
+        <div class="status-dots" id="statusDots"></div>
+        <p id="spinsCaption" class="caption-text"></p>
+
+        <div class="rules-card">
+          <h3>Spin Rules</h3>
+          <ul id="termsList"></ul>
+        </div>
+      </section>
+
+      <div id="errorBanner" class="error-banner hidden"></div>
+
+      <footer class="footer-bar">
+        <button id="termsButton" type="button">Terms & Conditions</button>
+        <button id="logoutButton" type="button" class="hidden">Logout</button>
+      </footer>
+    </main>
+  </div>
+
+  <div id="termsModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Spin & Win Rules</h2>
+      <ul id="modalTermsList"></ul>
+      <button id="closeTermsButton" class="btn-premium" type="button">I Understand</button>
+    </div>
+  </div>
+
+  <div id="rewardModal" class="modal hidden">
+    <div class="modal-card reward-card">
+      <div id="rewardIcon" class="reward-icon">🎁</div>
+      <h2 id="rewardTitle">Hooray!</h2>
+      <p id="rewardDescription"></p>
+      <button id="closeRewardButton" class="btn-premium" type="button">Next Spin</button>
+    </div>
+  </div>
+
+  <div id="transferModal" class="modal hidden">
+    <div class="modal-card reward-card">
+      <div class="reward-icon">✅</div>
+      <h2>Transfer Successful!</h2>
+      <p>Your coins have been transferred successfully.</p>
+      <button id="closeTransferButton" class="btn-premium" type="button">Awesome!</button>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

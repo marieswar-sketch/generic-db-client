@@ -1,6 +1,6 @@
 # Generic Spin Wheel Backend
 
-A separate spin-wheel backend starter built on a generic Postgres-compatible client.
+A separate spin-wheel project that ports the core behavior of the older Dostt spin-wheel app into a generic Postgres-based stack.
 
 It works with:
 - local PostgreSQL through Docker Compose
@@ -14,7 +14,12 @@ This repo does not depend on `supabase-js`.
 - reusable generic DB client
 - local PostgreSQL via Docker Compose
 - separate command to create spin-wheel tables automatically
-- Express API for player registration, spin, state, and transfer requests
+- served frontend with login, wheel, countdowns, tester panel, reward modal, transfer modal
+- Express API for player registration, spin, state, transfers, tester reset, and public config
+- deterministic daily reward logic from the older repo
+- tester-only forced rewards and custom transfer amounts
+- once-per-day transfer restriction for normal users
+- optional Redash + Dostt + Slack transfer integration through environment variables
 
 ## Setup
 
@@ -29,6 +34,8 @@ This repo does not depend on `supabase-js`.
    `npm run db:test`
 6. Start the backend:
    `npm run dev`
+7. Open:
+   `http://localhost:3000`
 
 ## Main commands
 
@@ -41,10 +48,12 @@ npm run dev
 ## Default API routes
 
 - `GET /health`
+- `GET /api/config`
 - `POST /api/players/register`
 - `GET /api/players/:mobileNumber/state`
 - `POST /api/spin`
 - `POST /api/transfers`
+- `POST /api/test/reset`
 
 ## Example `.env`
 
@@ -63,3 +72,19 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:
 DB_SSL=true
 PORT=3000
 ```
+
+## Transfer integration
+
+Set `TRANSFER_MODE=mock` for local testing with no external provider.
+
+To mimic the older repo's transfer flow, set:
+
+```env
+TRANSFER_MODE=provider
+REDASH_API_KEY=...
+REDASH_QUERY_ID=...
+DOSTT_AUTH_KEY=...
+SLACK_WEBHOOK_URL=...
+```
+
+If these are not configured, the app can still run locally in mock mode.

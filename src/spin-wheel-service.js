@@ -1,23 +1,63 @@
-import { runQuery } from './db.js';
+import dotenv from 'dotenv';
+import { runInTransaction, runQuery } from './db.js';
+
+dotenv.config();
 
 const DAILY_SPIN_LIMIT = 3;
+const DEFAULT_TESTER_NUMBERS = ['9500365660', '9600692495'];
+const COUNTED_TRANSFER_STATUSES = ['submitted', 'success', 'mock_success'];
+const WHEEL_SECTIONS = [
+  { id: 'better_luck', label: 'BETTER LUCK', color: '#f5b545', icon: '🌧️', text: '#1a0b2e', reward_coins: 0 },
+  { id: 'phone', label: 'PHONE', color: '#10b981', icon: '📱', text: 'white', reward_coins: 0 },
+  { id: 'airpods', label: 'AIRPODS', color: '#f19e38', icon: '🎧', text: 'white', reward_coins: 0 },
+  { id: '100_coins', label: '100 COINS', color: '#3b82f6', icon: '💎', text: 'white', reward_coins: 100 },
+  { id: '50_coins', label: '50 COINS', color: '#e11d48', icon: '💰', text: 'white', reward_coins: 50 },
+  { id: '10_coins', label: '10 COINS', color: '#10b981', icon: '🪙', text: 'white', reward_coins: 10 }
+];
 
-function pickReward(rewards) {
-  const totalWeight = rewards.reduce((sum, reward) => sum + reward.probability, 0);
-  const randomValue = Math.floor(Math.random() * totalWeight) + 1;
+function normalizeMobile(value) {
+  return String(value || '').replace(/\D/g, '').replace(/^91/, '');
+}
 
-  let cursor = 0;
-  for (const reward of rewards) {
-    cursor += reward.probability;
-    if (randomValue <= cursor) {
-      return reward;
-    }
-  }
+function getTesterNumbers() {
+  const configured = process.env.TESTER_MOBILE_NUMBERS
+    ? process.env.TESTER_MOBILE_NUMBERS.split(',').map((value) => normalizeMobile(value.trim())).filter(Boolean)
+    : [];
 
-  return rewards[0];
+  return configured.length > 0 ? configured : DEFAULT_TESTER_NUMBERS;
+}
+
+function isTesterMobile(mobileNumber) {
+  return getTesterNumbers().includes(normalizeMobile(mobileNumber));
+}
+
+function getWheelSection(rewardKey) {
+  return WHEEL_SECTIONS.find((item) => item.id === rewardKey) || WHEEL_SECTIONS[0];
+}
+
+function getCountedStatusesSql(startIndex = 2) {
+  return COUNTED_TRANSFER_STATUSES.map((_, index) => `$${startIndex + index}`).join(', ');
+}
+
+export function getPublicConfig() {
+  return {
+    wheelSections: WHEEL_SECTIONS,
+    testerMobileNumbers: getTesterNumbers(),
+    dailySpinLimit: DAILY_SPIN_LIMIT,
+    campaign: 'mobile_launch_2024',
+    banner: 'main_app',
+    terms: [
+      'You are entitled to 3 free spins per day.',
+      'Wallet transfers are limited to once per day for normal users.',
+      'Tester mobile numbers can bypass spin limits and force rewards.',
+      'If you win a physical prize, the team can contact you separately for fulfillment.'
+    ]
+  };
 }
 
 export async function registerPlayer({ mobileNumber, displayName = null }) {
+  const normalizedMobile = normalizeMobile(mobileNumber);
+
   const result = await runQuery(
     `
       INSERT INTO players (mobile_number, display_name)
@@ -28,39 +68,88 @@ export async function registerPlayer({ mobileNumber, displayName = null }) {
         updated_at = NOW()
       RETURNING id, mobile_number, display_name, total_coins, created_at, updated_at
     `,
-    [mobileNumber, displayName]
+    [normalizedMobile, displayName]
   );
 
   return result.rows[0];
 }
 
-export async function getPlayerState(mobileNumber) {
-  const playerResult = await runQuery(
+async function getPlayerByMobile(client, mobileNumber) {
+  const normalizedMobile = normalizeMobile(mobileNumber);
+  const result = await client.query(
     `
       SELECT id, mobile_number, display_name, total_coins, created_at, updated_at
       FROM players
       WHERE mobile_number = $1
     `,
-    [mobileNumber]
+    [normalizedMobile]
   );
 
-  if (playerResult.rowCount === 0) {
-    return null;
-  }
+  return result.rows[0] || null;
+}
 
-  const player = playerResult.rows[0];
+async function getDayNumber(client, playerId) {
+  const result = await client.query(
+    `
+      SELECT COUNT(DISTINCT spin_date)::int AS completed_days
+      FROM spin_events
+      WHERE player_id = $1
+        AND spin_date < CURRENT_DATE
+    `,
+    [playerId]
+  );
 
-  const spinsTodayResult = await runQuery(
+  return result.rows[0].completed_days + 1;
+}
+
+async function getSpinsToday(client, playerId) {
+  const result = await client.query(
     `
       SELECT COUNT(*)::int AS spins_today
       FROM spin_events
       WHERE player_id = $1
         AND spin_date = CURRENT_DATE
     `,
-    [player.id]
+    [playerId]
   );
 
-  const recentSpinsResult = await runQuery(
+  return result.rows[0].spins_today;
+}
+
+async function getTransferredToday(client, playerId) {
+  const result = await client.query(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM transfer_requests
+        WHERE player_id = $1
+          AND status IN (${getCountedStatusesSql()})
+          AND created_at >= date_trunc('day', NOW())
+          AND created_at < date_trunc('day', NOW()) + interval '1 day'
+      ) AS transferred_today
+    `,
+    [playerId, ...COUNTED_TRANSFER_STATUSES]
+  );
+
+  return result.rows[0].transferred_today;
+}
+
+async function getTransferredCoins(client, playerId) {
+  const result = await client.query(
+    `
+      SELECT COALESCE(SUM(coins_requested), 0)::int AS transferred_coins
+      FROM transfer_requests
+      WHERE player_id = $1
+        AND status IN (${getCountedStatusesSql()})
+    `,
+    [playerId, ...COUNTED_TRANSFER_STATUSES]
+  );
+
+  return result.rows[0].transferred_coins;
+}
+
+async function getRecentSpins(client, playerId) {
+  const result = await client.query(
     `
       SELECT reward_key, reward_label, coin_value, created_at
       FROM spin_events
@@ -68,107 +157,373 @@ export async function getPlayerState(mobileNumber) {
       ORDER BY created_at DESC
       LIMIT 10
     `,
-    [player.id]
+    [playerId]
   );
 
-  return {
-    ...player,
-    spins_today: spinsTodayResult.rows[0].spins_today,
-    spins_left: Math.max(0, DAILY_SPIN_LIMIT - spinsTodayResult.rows[0].spins_today),
-    recent_spins: recentSpinsResult.rows
-  };
+  return result.rows;
 }
 
-export async function spinForPlayer(mobileNumber) {
-  const player = await registerPlayer({ mobileNumber });
-  const state = await getPlayerState(mobileNumber);
+export async function getPlayerState(mobileNumber) {
+  return runInTransaction(async (client) => {
+    const player = await getPlayerByMobile(client, mobileNumber);
 
-  if (state.spins_today >= DAILY_SPIN_LIMIT) {
+    if (!player) {
+      return null;
+    }
+
+    const spinsToday = await getSpinsToday(client, player.id);
+    const transferredToday = await getTransferredToday(client, player.id);
+    const transferredCoins = await getTransferredCoins(client, player.id);
+    const recentSpins = await getRecentSpins(client, player.id);
+
     return {
-      status: 'limit_reached',
-      spins_left: 0,
-      message: 'Daily spin limit reached'
+      id: player.id,
+      mobile_number: player.mobile_number,
+      display_name: player.display_name,
+      spins_used: spinsToday,
+      max_spins: DAILY_SPIN_LIMIT,
+      total_winnings: Math.max(0, Number(player.total_coins) - transferredCoins),
+      transferred_today: transferredToday,
+      recent_spins: recentSpins
+    };
+  });
+}
+
+function determineReward({ dayNumber, spinNumberToday, forcedReward, isTester }) {
+  if (isTester && forcedReward) {
+    const testerReward = getWheelSection(forcedReward);
+    if (!testerReward) {
+      throw new Error(`Invalid forced reward: ${forcedReward}`);
+    }
+    return testerReward;
+  }
+
+  if (dayNumber % 5 === 0 && dayNumber % 10 !== 0) {
+    return getWheelSection('better_luck');
+  }
+
+  if (dayNumber % 10 === 0) {
+    return spinNumberToday === 3 ? getWheelSection('50_coins') : getWheelSection('better_luck');
+  }
+
+  return spinNumberToday === 3 ? getWheelSection('10_coins') : getWheelSection('better_luck');
+}
+
+export async function spinForPlayer(mobileNumber, forcedReward = null) {
+  const normalizedMobile = normalizeMobile(mobileNumber);
+  const tester = isTesterMobile(normalizedMobile);
+
+  return runInTransaction(async (client) => {
+    let player = await getPlayerByMobile(client, normalizedMobile);
+
+    if (!player) {
+      const insertResult = await client.query(
+        `
+          INSERT INTO players (mobile_number)
+          VALUES ($1)
+          RETURNING id, mobile_number, display_name, total_coins, created_at, updated_at
+        `,
+        [normalizedMobile]
+      );
+      player = insertResult.rows[0];
+    }
+
+    const dayNumber = await getDayNumber(client, player.id);
+    const spinsToday = await getSpinsToday(client, player.id);
+
+    if (!tester && spinsToday >= DAILY_SPIN_LIMIT) {
+      return {
+        status: 'error',
+        reason: 'daily_limit_reached'
+      };
+    }
+
+    const spinNumberToday = spinsToday + 1;
+    const reward = determineReward({
+      dayNumber,
+      spinNumberToday,
+      forcedReward,
+      isTester: tester
+    });
+
+    await client.query(
+      `
+        INSERT INTO spin_events (player_id, reward_key, reward_label, coin_value)
+        VALUES ($1, $2, $3, $4)
+      `,
+      [player.id, reward.id, reward.label, reward.reward_coins]
+    );
+
+    if (reward.reward_coins > 0) {
+      await client.query(
+        `
+          UPDATE players
+          SET total_coins = total_coins + $2,
+              updated_at = NOW()
+          WHERE id = $1
+        `,
+        [player.id, reward.reward_coins]
+      );
+      player.total_coins = Number(player.total_coins) + reward.reward_coins;
+    }
+
+    const transferredToday = await getTransferredToday(client, player.id);
+    const transferredCoins = await getTransferredCoins(client, player.id);
+
+    return {
+      status: 'ok',
+      reward: reward.id,
+      reward_label: reward.label,
+      reward_coins: reward.reward_coins,
+      spin_number_today: spinNumberToday,
+      user_day_number: dayNumber,
+      player: {
+        id: player.id,
+        mobile_number: player.mobile_number,
+        spins_used: spinNumberToday,
+        max_spins: DAILY_SPIN_LIMIT,
+        total_winnings: Math.max(0, Number(player.total_coins) - transferredCoins),
+        transferred_today: transferredToday
+      }
+    };
+  });
+}
+
+async function notifySlack(message) {
+  const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: message })
+    });
+  } catch (error) {
+    console.error('Slack notification failed:', error.message);
+  }
+}
+
+async function lookupExternalUserId(mobileNumber) {
+  const apiKey = process.env.REDASH_API_KEY;
+  const queryId = process.env.REDASH_QUERY_ID;
+
+  if (!apiKey || !queryId) {
+    return { userId: null, reason: 'lookup_not_configured' };
+  }
+
+  const redashPostUrl = `https://analytics.getlokalapp.com/api/queries/${queryId}/results`;
+  const response = await fetch(redashPostUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Key ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ parameters: { mobile_numbers: mobileNumber } })
+  });
+
+  const data = await response.json();
+  const findMatch = (rows = []) => rows.find((row) => normalizeMobile(row.mobile_no) === mobileNumber);
+
+  if (data.query_result) {
+    const match = findMatch(data.query_result.data.rows);
+    return { userId: match?.user_id || null, reason: match ? null : 'not_registered' };
+  }
+
+  if (data.job?.id) {
+    for (let index = 0; index < 10; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const jobCheck = await fetch(`https://analytics.getlokalapp.com/api/jobs/${data.job.id}`, {
+        headers: { Authorization: `Key ${apiKey}` }
+      });
+      const jobData = await jobCheck.json();
+
+      if (jobData.job.status === 3) {
+        const finalRes = await fetch(`https://analytics.getlokalapp.com/api/query_results/${jobData.job.query_result_id}`, {
+          headers: { Authorization: `Key ${apiKey}` }
+        });
+        const finalData = await finalRes.json();
+        const match = findMatch(finalData.query_result.data.rows);
+        return { userId: match?.user_id || null, reason: match ? null : 'not_registered' };
+      }
+
+      if (jobData.job.status === 4) {
+        throw new Error(jobData.job.error || 'Redash job failed');
+      }
+    }
+  }
+
+  return { userId: null, reason: 'not_registered' };
+}
+
+async function uploadCoinsToProvider(userId, amount) {
+  const authKey = process.env.DOSTT_AUTH_KEY;
+
+  if (!authKey) {
+    return {
+      ok: true,
+      providerRef: 'mock-transfer',
+      message: 'Mock transfer completed because DOSTT_AUTH_KEY is not configured.'
     };
   }
 
-  const rewardsResult = await runQuery(
-    `
-      SELECT id, reward_key, label, reward_type, coin_value, probability
-      FROM rewards
-      WHERE is_active = TRUE
-      ORDER BY id
-    `
-  );
+  const csvContent = `user_id,coins\n${userId},${amount}`;
+  const formData = new FormData();
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  formData.append('file', blob, 'transfer.csv');
+  formData.append('name', 'Spin the wheel');
 
-  const reward = pickReward(rewardsResult.rows);
+  const response = await fetch('https://api.dostt.in/payments/free-coins/upload/', {
+    method: 'POST',
+    headers: { 'x-n8n-auth-key': authKey },
+    body: formData
+  });
 
-  await runQuery(
-    `
-      INSERT INTO spin_events (player_id, reward_id, reward_key, reward_label, coin_value)
-      VALUES ($1, $2, $3, $4, $5)
-    `,
-    [player.id, reward.id, reward.reward_key, reward.label, reward.coin_value]
-  );
-
-  if (reward.coin_value > 0) {
-    await runQuery(
-      `
-        UPDATE players
-        SET total_coins = total_coins + $2,
-            updated_at = NOW()
-        WHERE id = $1
-      `,
-      [player.id, reward.coin_value]
-    );
-  }
-
-  const updatedState = await getPlayerState(mobileNumber);
+  const text = await response.text();
 
   return {
-    status: 'success',
-    reward: {
-      key: reward.reward_key,
-      label: reward.label,
-      type: reward.reward_type,
-      coin_value: reward.coin_value
-    },
-    player: updatedState
+    ok: response.ok || text.includes('Bulk upload started'),
+    providerRef: String(userId),
+    message: text
   };
 }
 
 export async function createTransferRequest(mobileNumber, coinsRequested) {
-  const state = await getPlayerState(mobileNumber);
+  const normalizedMobile = normalizeMobile(mobileNumber);
+  const tester = isTesterMobile(normalizedMobile);
 
-  if (!state) {
-    throw new Error('Player not found');
+  return runInTransaction(async (client) => {
+    const player = await getPlayerByMobile(client, normalizedMobile);
+    if (!player) {
+      throw new Error('Player not found');
+    }
+
+    const spinsUsed = await getSpinsToday(client, player.id);
+    const transferredToday = await getTransferredToday(client, player.id);
+    const transferredCoins = await getTransferredCoins(client, player.id);
+    const totalWinnings = Math.max(0, Number(player.total_coins) - transferredCoins);
+
+    if (coinsRequested <= 0) {
+      throw new Error('Coins requested must be greater than zero');
+    }
+
+    if (!tester && transferredToday) {
+      throw new Error('Transfer already completed for today');
+    }
+
+    if (coinsRequested > totalWinnings) {
+      throw new Error('Requested coins exceed available balance');
+    }
+
+    const transferMode = process.env.TRANSFER_MODE || 'mock';
+    let status = 'submitted';
+    let notes = 'Transfer submitted successfully';
+    let errorMessage = null;
+    let providerRef = null;
+
+    if (transferMode === 'mock') {
+      status = 'mock_success';
+      notes = 'Mock transfer completed locally';
+      providerRef = 'mock-transfer';
+    } else {
+      const lookup = await lookupExternalUserId(normalizedMobile);
+
+      if (!lookup.userId) {
+        status = 'failed_not_registered';
+        errorMessage = 'This number was not registered with Dostt App. Please use your registered number.';
+        notes = lookup.reason || 'User lookup failed';
+
+        const failedResult = await client.query(
+          `
+            INSERT INTO transfer_requests (player_id, coins_requested, status, notes, error_message)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, player_id, coins_requested, status, notes, error_message, provider_ref, created_at
+          `,
+          [player.id, coinsRequested, status, notes, errorMessage]
+        );
+
+        await notifySlack(`⚠️ Spin Wheel Transfer Failed\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nReason: ${errorMessage}`);
+        return {
+          ...failedResult.rows[0],
+          public_error: errorMessage
+        };
+      }
+
+      const providerResult = await uploadCoinsToProvider(lookup.userId, coinsRequested);
+      providerRef = providerResult.providerRef || String(lookup.userId);
+
+      if (!providerResult.ok) {
+        status = 'failed_provider';
+        notes = 'External provider transfer failed';
+        errorMessage = providerResult.message || 'Transfer failed at provider';
+
+        const failedResult = await client.query(
+          `
+            INSERT INTO transfer_requests (player_id, coins_requested, status, notes, error_message, provider_ref)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, player_id, coins_requested, status, notes, error_message, provider_ref, created_at
+          `,
+          [player.id, coinsRequested, status, notes, errorMessage, providerRef]
+        );
+
+        await notifySlack(`⚠️ Spin Wheel Transfer Failed\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nReason: ${errorMessage}`);
+        return {
+          ...failedResult.rows[0],
+          public_error: 'We could not complete the transfer right now. Please try again shortly.'
+        };
+      }
+
+      notes = providerResult.message || 'Transfer submitted to provider';
+      await notifySlack(`🚀 Spin Wheel Transfer Submitted\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nProvider Ref: ${providerRef}`);
+    }
+
+    const transferResult = await client.query(
+      `
+        INSERT INTO transfer_requests (player_id, coins_requested, status, notes, error_message, provider_ref)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, player_id, coins_requested, status, notes, error_message, provider_ref, created_at
+      `,
+      [player.id, coinsRequested, status, notes, errorMessage, providerRef]
+    );
+
+    return {
+      ...transferResult.rows[0],
+      player: {
+        id: player.id,
+        mobile_number: player.mobile_number,
+        spins_used: spinsUsed,
+        max_spins: DAILY_SPIN_LIMIT,
+        total_winnings: Math.max(0, totalWinnings - coinsRequested),
+        transferred_today: true
+      }
+    };
+  });
+}
+
+export async function resetTestData(mobileNumber) {
+  const normalizedMobile = normalizeMobile(mobileNumber);
+  if (!isTesterMobile(normalizedMobile)) {
+    throw new Error('Reset is allowed only for tester mobiles');
   }
 
-  if (coinsRequested <= 0) {
-    throw new Error('Coins requested must be greater than zero');
-  }
+  return runInTransaction(async (client) => {
+    const player = await getPlayerByMobile(client, normalizedMobile);
+    if (!player) {
+      return { status: 'success', message: 'No player data found to reset' };
+    }
 
-  if (coinsRequested > state.total_coins) {
-    throw new Error('Requested coins exceed available balance');
-  }
+    await client.query('DELETE FROM spin_events WHERE player_id = $1', [player.id]);
+    await client.query('DELETE FROM transfer_requests WHERE player_id = $1', [player.id]);
+    await client.query(
+      `
+        UPDATE players
+        SET total_coins = 0,
+            updated_at = NOW()
+        WHERE id = $1
+      `,
+      [player.id]
+    );
 
-  const transferResult = await runQuery(
-    `
-      INSERT INTO transfer_requests (player_id, coins_requested, status)
-      VALUES ($1, $2, 'pending')
-      RETURNING id, player_id, coins_requested, status, notes, created_at
-    `,
-    [state.id, coinsRequested]
-  );
-
-  await runQuery(
-    `
-      UPDATE players
-      SET total_coins = total_coins - $2,
-          updated_at = NOW()
-      WHERE id = $1
-    `,
-    [state.id, coinsRequested]
-  );
-
-  return transferResult.rows[0];
+    return { status: 'success', message: 'Test player reset complete' };
+  });
 }
