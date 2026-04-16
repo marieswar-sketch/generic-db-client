@@ -7,11 +7,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-  const sqlPath = path.join(__dirname, '..', 'sql', 'create_app_users.sql');
+  const sqlPath = path.join(__dirname, '..', 'sql', 'create_spin_wheel_tables.sql');
   const sql = await fs.readFile(sqlPath, 'utf8');
 
   await runQuery(sql);
-  console.log('Table creation completed successfully.');
+  console.log('Spin wheel tables created successfully.');
 }
 
 main().catch((error) => {

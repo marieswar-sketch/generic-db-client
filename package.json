@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Generic Postgres-compatible DB client for PostgreSQL and Supabase Postgres",
+  "description": "Spin wheel backend starter using a generic Postgres-compatible client",
   "scripts": {
-    "start": "node src/index.js",
-    "db:create-table": "node scripts/create-table.js",
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "db:create-tables": "node scripts/create-tables.js",
     "db:test": "node scripts/test-connection.js"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
+    "express": "^4.21.2",
     "pg": "^8.16.3"
   }
 }
