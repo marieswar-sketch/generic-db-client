@@ -45,6 +45,82 @@ npm run db:test
 npm run dev
 ```
 
+## Docker
+
+Build the production image locally:
+
+```bash
+docker build -t generic-db-client:local .
+```
+
+Run it against a Postgres database:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e PORT=3000 \
+  -e DATABASE_URL=postgresql://app_user:app_password@host.docker.internal:5432/app_db \
+  -e DB_SSL=false \
+  generic-db-client:local
+```
+
+Then open:
+`http://localhost:3000`
+
+## GHCR publishing
+
+This repo includes a GitHub Actions workflow that builds and publishes a Docker image to GitHub Container Registry (GHCR) on every push to `main`.
+
+Published image pattern:
+
+```text
+ghcr.io/<github-owner>/<repo>:latest
+ghcr.io/<github-owner>/<repo>:sha-<commit>
+```
+
+For this repo, the image name will be:
+
+```text
+ghcr.io/marieswar-sketch/generic-db-client
+```
+
+## Kubero deployment
+
+Kubero runs on top of Kubernetes. The easiest path for this app is:
+
+1. Create a managed Kubernetes cluster
+2. Install Kubero with the Kubero CLI
+3. Create a Kubero pipeline/environment
+4. Create an app with deployment strategy set to `Docker`
+5. Point the app to:
+   `ghcr.io/marieswar-sketch/generic-db-client:latest`
+6. Set the app container port to:
+   `3000`
+7. If the image is private, add GHCR pull credentials in Kubero
+8. Add a PostgreSQL add-on in Kubero, or use an external Postgres database
+9. Set app environment variables in Kubero
+10. Run the schema once against the target database using:
+   `npm run db:create-tables`
+
+### Recommended Kubero environment variables
+
+```env
+PORT=3000
+DATABASE_URL=postgresql://...
+DB_SSL=true
+TESTER_MOBILE_NUMBERS=9500365660,9600692495
+TRANSFER_MODE=provider
+REDASH_API_KEY=...
+REDASH_QUERY_ID=...
+DOSTT_AUTH_KEY=...
+SLACK_WEBHOOK_URL=...
+```
+
+Notes:
+- Keep real secrets only in Kubero secrets or local `.env`
+- Do not commit live secrets into `.env.example`
+- Use Kubero's PostgreSQL add-on unless you already have an external managed Postgres
+- If GHCR image access is private, Kubero must be configured with a GitHub username/token that can pull `ghcr.io/marieswar-sketch/generic-db-client`
+
 ## Default API routes
 
 - `GET /health`
