@@ -7,12 +7,12 @@ const DAILY_SPIN_LIMIT = 3;
 const DEFAULT_TESTER_NUMBERS = ['9500365660', '9600692495'];
 const COUNTED_TRANSFER_STATUSES = ['submitted', 'success', 'mock_success'];
 const WHEEL_SECTIONS = [
-  { id: 'better_luck', label: 'BETTER LUCK', color: '#f5b545', icon: '🌧️', text: '#1a0b2e', reward_coins: 0 },
-  { id: 'phone', label: 'PHONE', color: '#10b981', icon: '📱', text: 'white', reward_coins: 0 },
-  { id: 'airpods', label: 'AIRPODS', color: '#f19e38', icon: '🎧', text: 'white', reward_coins: 0 },
-  { id: '100_coins', label: '100 COINS', color: '#3b82f6', icon: '💎', text: 'white', reward_coins: 100 },
-  { id: '50_coins', label: '50 COINS', color: '#e11d48', icon: '💰', text: 'white', reward_coins: 50 },
-  { id: '10_coins', label: '10 COINS', color: '#10b981', icon: '🪙', text: 'white', reward_coins: 10 }
+  { id: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
+  { id: 'phone', label: 'PHONE', color: '#cfd3d9', icon: '📱', text: '#ffffff', reward_coins: 0 },
+  { id: 'airpods', label: 'AIRPODS', color: '#d5d8de', icon: '🎧', text: '#ffffff', reward_coins: 0 },
+  { id: '100_coins', label: '100 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 100 },
+  { id: '50_coins', label: '50 COINS', color: '#cfd3d9', icon: '💰', text: '#ffffff', reward_coins: 50 },
+  { id: '10_coins', label: '10 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 10 }
 ];
 
 function normalizeMobile(value) {

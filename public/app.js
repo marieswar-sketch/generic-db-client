@@ -83,11 +83,104 @@ function showError(message) {
   elements.errorBanner.classList.remove('hidden');
 }
 
+function getFriendlyErrorMessage(error) {
+  if (!error) {
+    return 'Something went wrong. Please try again.';
+  }
+
+  if (error.message === 'Failed to fetch' || error.message === 'NetworkError when attempting to fetch resource.') {
+    return 'Local server is not running. Start `npm run dev` and try again.';
+  }
+
+  return error.message || 'Something went wrong. Please try again.';
+}
+
 function showView(viewName) {
   elements.loginView.classList.add('hidden');
   elements.loadingView.classList.add('hidden');
   elements.wheelView.classList.add('hidden');
   elements[viewName].classList.remove('hidden');
+}
+
+function getCoinSvgMarkup(tone = 'single') {
+  const coins = {
+    single: `
+      <ellipse cx="54" cy="86" rx="28" ry="9" fill="rgba(123,73,0,0.14)"/>
+      <g transform="translate(16 14)">
+        <circle cx="38" cy="38" r="30" fill="url(#coinGoldMain)"/>
+        <circle cx="38" cy="38" r="21" fill="none" stroke="rgba(255,247,196,0.94)" stroke-width="3"/>
+        <ellipse cx="28" cy="24" rx="9" ry="6" fill="rgba(255,255,255,0.42)"/>
+      </g>
+    `,
+    medium: `
+      <ellipse cx="54" cy="88" rx="34" ry="10" fill="rgba(123,73,0,0.14)"/>
+      <g transform="translate(8 42)">
+        <circle cx="20" cy="20" r="20" fill="url(#coinGoldMain)"/>
+        <circle cx="20" cy="20" r="13.5" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.4"/>
+      </g>
+      <g transform="translate(28 26)">
+        <circle cx="22" cy="22" r="22" fill="url(#coinGoldMain)"/>
+        <circle cx="22" cy="22" r="15" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.4"/>
+      </g>
+      <g transform="translate(50 48)">
+        <circle cx="20" cy="20" r="20" fill="url(#coinGoldMain)"/>
+        <circle cx="20" cy="20" r="13.5" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.4"/>
+      </g>
+    `,
+    rich: `
+      <ellipse cx="56" cy="92" rx="40" ry="11" fill="rgba(123,73,0,0.16)"/>
+      <g transform="translate(2 50)">
+        <circle cx="18" cy="18" r="18" fill="url(#coinGoldMain)"/>
+        <circle cx="18" cy="18" r="12" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.2"/>
+      </g>
+      <g transform="translate(18 30)">
+        <circle cx="20" cy="20" r="20" fill="url(#coinGoldMain)"/>
+        <circle cx="20" cy="20" r="13.5" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.4"/>
+      </g>
+      <g transform="translate(38 18)">
+        <circle cx="22" cy="22" r="22" fill="url(#coinGoldMain)"/>
+        <circle cx="22" cy="22" r="15" fill="none" stroke="rgba(255,247,196,0.94)" stroke-width="2.5"/>
+      </g>
+      <g transform="translate(58 38)">
+        <circle cx="20" cy="20" r="20" fill="url(#coinGoldMain)"/>
+        <circle cx="20" cy="20" r="13.5" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.4"/>
+      </g>
+      <g transform="translate(74 58)">
+        <circle cx="18" cy="18" r="18" fill="url(#coinGoldMain)"/>
+        <circle cx="18" cy="18" r="12" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.2"/>
+      </g>
+    `
+  };
+
+  return `
+    <svg class="coin-icon-svg coin-icon-${tone}" viewBox="0 0 108 108" aria-hidden="true">
+      <defs>
+        <radialGradient id="coinGoldMain" cx="35%" cy="28%" r="75%">
+          <stop offset="0%" stop-color="#FFF8D7"/>
+          <stop offset="28%" stop-color="#F9DF86"/>
+          <stop offset="60%" stop-color="#D89D27"/>
+          <stop offset="100%" stop-color="#925804"/>
+        </radialGradient>
+      </defs>
+      ${coins[tone]}
+    </svg>
+  `;
+}
+
+function getWheelIconMarkup(section) {
+  if (section.id === '100_coins') {
+    return getCoinSvgMarkup('rich');
+  }
+
+  if (section.id === '50_coins') {
+    return getCoinSvgMarkup('medium');
+  }
+
+  if (section.id === '10_coins') {
+    return getCoinSvgMarkup('single');
+  }
+
+  return section.icon;
 }
 
 function renderWheel() {
@@ -98,12 +191,19 @@ function renderWheel() {
   elements.forcedRewardSelect.innerHTML = '<option value="">Default (Random)</option>';
 
   sections.forEach((section, index) => {
+    const angle = index * size + size / 2;
     const label = document.createElement('div');
     label.className = 'segment-label-item';
-    label.style.transform = `rotate(${index * size + size / 2}deg)`;
+    label.style.transform = `rotate(${angle}deg)`;
+    label.style.setProperty('--segment-angle', `${angle}deg`);
+    const displayLabel = section.label.includes(' ')
+      ? section.label.split(' ').join('<br>')
+      : section.label;
     label.innerHTML = `
-      <span class="label-icon">${section.icon}</span>
-      <span class="label-text" style="color:${section.text}">${section.label}</span>
+      <div class="label-content">
+        <span class="label-icon">${getWheelIconMarkup(section)}</span>
+        <span class="label-text ${section.label.length > 12 ? 'label-text-wide' : ''}" style="color:${section.text}">${displayLabel}</span>
+      </div>
     `;
     elements.segmentLabels.appendChild(label);
 
@@ -223,9 +323,19 @@ function renderLoggedInUi() {
 
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
-  const data = await response.json();
+  const raw = await response.text();
+  let data = {};
+
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { error: raw };
+    }
+  }
+
   if (!response.ok) {
-    throw new Error(data.error || data.reason || 'Request failed');
+    throw new Error(data.error || data.reason || data.message || `Request failed (${response.status})`);
   }
   return data;
 }
@@ -258,7 +368,9 @@ async function refreshState() {
       state.spinState = data;
       renderLoggedInUi();
     } else {
-      showError(error.message);
+      state.isLoggedIn = false;
+      renderAuthState();
+      showError(getFriendlyErrorMessage(error));
       showView('loginView');
     }
   }
@@ -272,15 +384,27 @@ async function handleLogin(event) {
     return;
   }
 
-  state.mobileNumber = normalizedMobile;
-  state.isLoggedIn = true;
-  localStorage.setItem('user_mobile', normalizedMobile);
-  await fetchJson('/api/players/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mobileNumber: normalizedMobile })
-  });
-  await refreshState();
+  try {
+    state.mobileNumber = normalizedMobile;
+    state.isLoggedIn = true;
+    localStorage.setItem('user_mobile', normalizedMobile);
+    showError('');
+    showView('loadingView');
+
+    await fetchJson('/api/players/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mobileNumber: normalizedMobile })
+    });
+    await refreshState();
+  } catch (error) {
+    state.mobileNumber = '';
+    state.isLoggedIn = false;
+    localStorage.removeItem('user_mobile');
+    renderAuthState();
+    showError(getFriendlyErrorMessage(error));
+    showView('loginView');
+  }
 }
 
 function launchConfetti() {
@@ -335,7 +459,7 @@ async function handleSpin() {
     }, 5000);
   } catch (error) {
     state.spinning = false;
-    showError(error.message === 'daily_limit_reached' ? 'Spin limit reached for today' : error.message);
+    showError(error.message === 'daily_limit_reached' ? 'Spin limit reached for today' : getFriendlyErrorMessage(error));
     renderWheelState();
   }
 }
@@ -379,7 +503,7 @@ async function handleTransfer() {
     elements.transferModal.classList.remove('hidden');
     await refreshState();
   } catch (error) {
-    showError(error.message);
+    showError(getFriendlyErrorMessage(error));
     renderTransferArea();
   } finally {
     state.transferring = false;
@@ -398,7 +522,7 @@ async function handleResetTester() {
     localStorage.removeItem('user_mobile');
     window.location.reload();
   } catch (error) {
-    showError(error.message);
+    showError(getFriendlyErrorMessage(error));
   }
 }
 
@@ -438,5 +562,5 @@ async function init() {
 }
 
 init().catch((error) => {
-  showError(error.message);
+  showError(getFriendlyErrorMessage(error));
 });
