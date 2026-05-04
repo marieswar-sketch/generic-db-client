@@ -1,10 +1,3 @@
-const MODAL_TERMS = [
-  '<strong>Daily Allowance:</strong> You are entitled to 3 free spins per day. Your spin balance refreshes every 24 hours.',
-  '<strong>Manual Transfers:</strong> Once you initiate a transfer, your coin winnings will be processed and credited to your Dostt Wallet within 24 hours.',
-  '<strong>Grand Prize Notification:</strong> If you win a mobile device or AirPods, our team will contact you within 24 hours to coordinate fulfillment.',
-  '<strong>Shipping Logistics:</strong> Final delivery timelines for physical prizes may vary depending on your location.'
-];
-
 const RULE_CARD_ITEMS = [
   '<strong>Daily Allowance:</strong> Enjoy 3 free spins, refreshing every 24 hours.',
   '<strong>Wallet Transfers:</strong> Transfer is available <strong class="rules-accent">once per day</strong>.'
@@ -48,7 +41,6 @@ const elements = {
   termsButton: document.getElementById('termsButton'),
   logoutButton: document.getElementById('logoutButton'),
   termsModal: document.getElementById('termsModal'),
-  modalTermsList: document.getElementById('modalTermsList'),
   closeTermsButton: document.getElementById('closeTermsButton'),
   rewardModal: document.getElementById('rewardModal'),
   rewardIcon: document.getElementById('rewardIcon'),
@@ -292,7 +284,6 @@ function renderTransferArea() {
 
 function renderTerms() {
   elements.rulesList.innerHTML = RULE_CARD_ITEMS.map((item) => `<li>${item}</li>`).join('');
-  elements.modalTermsList.innerHTML = MODAL_TERMS.map((item) => `<li>${item}</li>`).join('');
 }
 
 function renderAuthState() {
