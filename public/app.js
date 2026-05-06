@@ -1,5 +1,7 @@
 const RULE_CARD_ITEMS = [
   '<strong>Daily Allowance:</strong> Enjoy 3 free spins, refreshing every 24 hours.',
+  '<strong>Daily Reward:</strong> Exactly one of your 3 spins rewards coins, and it can appear on any spin.',
+  '<strong>5th Day Bonus:</strong> Every 5th participation day upgrades that reward to <strong class="rules-accent">50 coins</strong>.',
   '<strong>Wallet Transfers:</strong> Transfer is available <strong class="rules-accent">once per day</strong>.'
 ];
 
@@ -57,7 +59,17 @@ let spinCountdownInterval = null;
 let transferCountdownInterval = null;
 
 function normalizeMobile(value) {
-  return String(value || '').replace(/\D/g, '').replace(/^91/, '');
+  const digits = String(value || '').replace(/\D/g, '');
+
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits.slice(2);
+  }
+
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits.slice(1);
+  }
+
+  return digits;
 }
 
 function isTester() {
@@ -181,6 +193,7 @@ function renderWheel() {
   elements.wheelMain.style.background = `conic-gradient(${sections.map((section, index) => `${section.color} ${index * size}deg ${(index + 1) * size}deg`).join(', ')})`;
   elements.segmentLabels.innerHTML = '';
   elements.forcedRewardSelect.innerHTML = '<option value="">Default (Random)</option>';
+  const testerOptions = state.config.testerRewardOptions || sections;
 
   sections.forEach((section, index) => {
     const angle = index * size + size / 2;
@@ -199,9 +212,12 @@ function renderWheel() {
     `;
     elements.segmentLabels.appendChild(label);
 
+  });
+
+  testerOptions.forEach((optionConfig) => {
     const option = document.createElement('option');
-    option.value = section.id;
-    option.textContent = section.label;
+    option.value = optionConfig.id;
+    option.textContent = optionConfig.label;
     elements.forcedRewardSelect.appendChild(option);
   });
 }
@@ -432,7 +448,12 @@ async function handleSpin() {
     });
 
     const sections = state.config.wheelSections;
-    const targetIndex = sections.findIndex((section) => section.id === result.reward);
+    const matchingIndexes = sections
+      .map((section, index) => ((section.reward_key || section.id) === result.reward ? index : -1))
+      .filter((index) => index >= 0);
+    const targetIndex = matchingIndexes.length > 0
+      ? matchingIndexes[Math.floor(Math.random() * matchingIndexes.length)]
+      : 0;
     const segmentSize = 360 / sections.length;
     const extraSpins = 12 * 360;
     const landingOffset = 360 - (targetIndex * segmentSize + segmentSize / 2);
@@ -456,7 +477,8 @@ async function handleSpin() {
 }
 
 function openRewardModal(result) {
-  const reward = state.config.wheelSections.find((item) => item.id === result.reward) || state.config.wheelSections[0];
+  const rewardPool = state.config.testerRewardOptions || state.config.wheelSections;
+  const reward = rewardPool.find((item) => item.id === result.reward || item.reward_key === result.reward) || rewardPool[0];
   const isWinner = Number(result.reward_coins) > 0;
   elements.rewardIcon.textContent = reward.icon;
   elements.rewardTitle.textContent = isWinner ? 'Hooray!' : 'Oh No!';

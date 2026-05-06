@@ -6,17 +6,35 @@ dotenv.config();
 const DAILY_SPIN_LIMIT = 3;
 const DEFAULT_TESTER_NUMBERS = ['9500365660', '9600692495'];
 const COUNTED_TRANSFER_STATUSES = ['submitted', 'success', 'mock_success'];
+const REWARD_OPTIONS = [
+  { id: 'better_luck', label: 'BETTER LUCK', reward_coins: 0, icon: '☁️', text: '#111827' },
+  { id: '10_coins', label: '10 COINS', reward_coins: 10, icon: '🪙', text: '#111827' },
+  { id: '50_coins', label: '50 COINS', reward_coins: 50, icon: '💰', text: '#ffffff' },
+  { id: '100_coins', label: '100 COINS', reward_coins: 100, icon: '🪙', text: '#111827' },
+  { id: 'phone', label: 'PHONE', reward_coins: 0, icon: '📱', text: '#ffffff' },
+  { id: 'airpods', label: 'AIRPODS', reward_coins: 0, icon: '🎧', text: '#ffffff' }
+];
 const WHEEL_SECTIONS = [
-  { id: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
-  { id: 'phone', label: 'PHONE', color: '#cfd3d9', icon: '📱', text: '#ffffff', reward_coins: 0 },
-  { id: 'airpods', label: 'AIRPODS', color: '#d5d8de', icon: '🎧', text: '#ffffff', reward_coins: 0 },
-  { id: '100_coins', label: '100 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 100 },
-  { id: '50_coins', label: '50 COINS', color: '#cfd3d9', icon: '💰', text: '#ffffff', reward_coins: 50 },
-  { id: '10_coins', label: '10 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 10 }
+  { id: 'better_luck_left', reward_key: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
+  { id: '10_coins_top', reward_key: '10_coins', label: '10 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 10 },
+  { id: 'better_luck_right', reward_key: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
+  { id: '50_coins', reward_key: '50_coins', label: '50 COINS', color: '#cfd3d9', icon: '💰', text: '#ffffff', reward_coins: 50 },
+  { id: 'better_luck_bottom', reward_key: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
+  { id: '10_coins_bottom', reward_key: '10_coins', label: '10 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 10 }
 ];
 
 function normalizeMobile(value) {
-  return String(value || '').replace(/\D/g, '').replace(/^91/, '');
+  const digits = String(value || '').replace(/\D/g, '');
+
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits.slice(2);
+  }
+
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return digits.slice(1);
+  }
+
+  return digits;
 }
 
 function getTesterNumbers() {
@@ -31,8 +49,8 @@ function isTesterMobile(mobileNumber) {
   return getTesterNumbers().includes(normalizeMobile(mobileNumber));
 }
 
-function getWheelSection(rewardKey) {
-  return WHEEL_SECTIONS.find((item) => item.id === rewardKey) || WHEEL_SECTIONS[0];
+function getRewardOption(rewardKey) {
+  return REWARD_OPTIONS.find((item) => item.id === rewardKey) || REWARD_OPTIONS[0];
 }
 
 function getCountedStatusesSql(startIndex = 2) {
@@ -42,6 +60,7 @@ function getCountedStatusesSql(startIndex = 2) {
 export function getPublicConfig() {
   return {
     wheelSections: WHEEL_SECTIONS,
+    testerRewardOptions: REWARD_OPTIONS,
     testerMobileNumbers: getTesterNumbers(),
     dailySpinLimit: DAILY_SPIN_LIMIT,
     campaign: 'mobile_launch_2024',
@@ -49,6 +68,8 @@ export function getPublicConfig() {
     terms: [
       'You are entitled to 3 free spins per day.',
       'Wallet transfers are limited to once per day for normal users.',
+      'Exactly one of your daily spins rewards coins, and it can appear on any spin.',
+      'Every 5th participation day upgrades that daily reward to 50 coins.',
       'Tester mobile numbers can bypass spin limits and force rewards.',
       'If you win a physical prize, the team can contact you separately for fulfillment.'
     ]
@@ -100,6 +121,16 @@ async function getDayNumber(client, playerId) {
   );
 
   return result.rows[0].completed_days + 1;
+}
+
+async function getCurrentDateKey(client) {
+  const result = await client.query(
+    `
+      SELECT CURRENT_DATE::text AS current_date
+    `
+  );
+
+  return result.rows[0].current_date;
 }
 
 async function getSpinsToday(client, playerId) {
@@ -189,24 +220,34 @@ export async function getPlayerState(mobileNumber) {
   });
 }
 
-function determineReward({ dayNumber, spinNumberToday, forcedReward, isTester }) {
+function getDailyRewardSpin({ playerId, currentDateKey }) {
+  const source = `${playerId}-${currentDateKey}`;
+  let hash = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
+  }
+
+  return (hash % DAILY_SPIN_LIMIT) + 1;
+}
+
+function determineReward({ dayNumber, spinNumberToday, forcedReward, isTester, playerId, currentDateKey }) {
   if (isTester && forcedReward) {
-    const testerReward = getWheelSection(forcedReward);
+    const testerReward = REWARD_OPTIONS.find((item) => item.id === forcedReward);
     if (!testerReward) {
       throw new Error(`Invalid forced reward: ${forcedReward}`);
     }
     return testerReward;
   }
 
-  if (dayNumber % 5 === 0 && dayNumber % 10 !== 0) {
-    return getWheelSection('better_luck');
+  const dailyRewardSpin = getDailyRewardSpin({ playerId, currentDateKey });
+  const dailyRewardType = dayNumber % 5 === 0 ? '50_coins' : '10_coins';
+
+  if (spinNumberToday === dailyRewardSpin) {
+    return getRewardOption(dailyRewardType);
   }
 
-  if (dayNumber % 10 === 0) {
-    return spinNumberToday === 3 ? getWheelSection('50_coins') : getWheelSection('better_luck');
-  }
-
-  return spinNumberToday === 3 ? getWheelSection('10_coins') : getWheelSection('better_luck');
+  return getRewardOption('better_luck');
 }
 
 export async function spinForPlayer(mobileNumber, forcedReward = null) {
@@ -229,6 +270,7 @@ export async function spinForPlayer(mobileNumber, forcedReward = null) {
     }
 
     const dayNumber = await getDayNumber(client, player.id);
+    const currentDateKey = await getCurrentDateKey(client);
     const spinsToday = await getSpinsToday(client, player.id);
 
     if (!tester && spinsToday >= DAILY_SPIN_LIMIT) {
@@ -243,7 +285,9 @@ export async function spinForPlayer(mobileNumber, forcedReward = null) {
       dayNumber,
       spinNumberToday,
       forcedReward,
-      isTester: tester
+      isTester: tester,
+      playerId: player.id,
+      currentDateKey
     });
 
     await client.query(
