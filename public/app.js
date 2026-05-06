@@ -1,7 +1,5 @@
 const RULE_CARD_ITEMS = [
   '<strong>Daily Allowance:</strong> Enjoy 3 free spins, refreshing every 24 hours.',
-  '<strong>Daily Reward:</strong> Exactly one of your 3 spins rewards coins, and it can appear on any spin.',
-  '<strong>5th Day Bonus:</strong> Every 5th participation day upgrades that reward to <strong class="rules-accent">50 coins</strong>.',
   '<strong>Wallet Transfers:</strong> Transfer is available <strong class="rules-accent">once per day</strong>.'
 ];
 
