@@ -68,8 +68,6 @@ export function getPublicConfig() {
     terms: [
       'You are entitled to 3 free spins per day.',
       'Wallet transfers are limited to once per day for normal users.',
-      'Exactly one of your daily spins rewards coins, and it can appear on any spin.',
-      'Every 5th participation day upgrades that daily reward to 50 coins.',
       'Tester mobile numbers can bypass spin limits and force rewards.',
       'If you win a physical prize, the team can contact you separately for fulfillment.'
     ]
