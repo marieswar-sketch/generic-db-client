@@ -935,31 +935,100 @@ option {
 
 @media (max-width: 768px) {
   .page-root {
-    padding-top: 116px;
+    padding: 168px 14px 48px;
   }
 
   .brand-header {
-    top: 16px;
+    position: absolute;
+    top: 18px;
     left: 16px;
   }
 
+  .brand-logo {
+    width: 120px;
+  }
+
   .top-bar {
-    top: 16px;
+    position: absolute;
+    top: 82px;
     left: 16px;
     right: 16px;
   }
 
   .wallet-card {
+    gap: 12px;
     justify-content: space-between;
+    padding: 14px 16px;
+    border-radius: 20px;
+  }
+
+  .wallet-inner {
+    flex: 1;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .wallet-icon-shell {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    flex: 0 0 auto;
+  }
+
+  .wallet-label {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+  }
+
+  .wallet-value {
+    font-size: 1.05rem;
+  }
+
+  .wallet-unit {
+    font-size: 9px;
+  }
+
+  .transfer-chip {
+    min-width: 110px;
+    padding: 11px 14px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
   }
 
   .main-card {
-    padding: 28px 20px 24px;
+    padding: 30px 18px 22px;
     border-radius: 30px;
   }
 
   :root {
-    --wheel-size: 300px;
+    --wheel-size: min(78vw, 332px);
+  }
+
+  .hero-title {
+    margin-bottom: 24px;
+    font-size: clamp(2.8rem, 11vw, 4.2rem);
+  }
+
+  .wheel-wrapper {
+    margin: 18px auto 10px;
+  }
+
+  .action-stack {
+    margin-top: 28px;
+  }
+
+  .spin-button {
+    padding-block: 18px;
+    font-size: 1rem;
+    letter-spacing: 0.09em;
+  }
+
+  .status-section {
+    margin-top: 18px;
+  }
+
+  .status-dot {
+    width: 46px;
   }
 
   .cooldown-value {
@@ -974,6 +1043,12 @@ option {
 
   .reward-card {
     padding-inline: 24px;
+  }
+
+  .footer-bar {
+    margin-top: 26px;
+    padding-top: 20px;
+    padding-inline: 6px;
   }
 
   .modal-header,
@@ -995,6 +1070,141 @@ option {
 }
 
 @media (max-width: 560px) {
+  .page-root {
+    padding: 152px 10px 32px;
+  }
+
+  .brand-header {
+    top: 16px;
+    left: 12px;
+  }
+
+  .brand-logo {
+    width: 112px;
+  }
+
+  .top-bar {
+    top: 72px;
+    left: 10px;
+    right: 10px;
+  }
+
+  .wallet-card {
+    gap: 10px;
+    padding: 12px 12px;
+    align-items: center;
+  }
+
+  .wallet-inner {
+    gap: 9px;
+  }
+
+  .wallet-icon-shell {
+    width: 34px;
+    height: 34px;
+  }
+
+  .wallet-label {
+    font-size: 8px;
+    margin-bottom: 3px;
+  }
+
+  .wallet-value {
+    font-size: 0.95rem;
+  }
+
+  .wallet-unit {
+    font-size: 8px;
+  }
+
+  .transfer-chip {
+    min-width: 96px;
+    padding: 10px 12px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+  }
+
+  .main-card {
+    padding: 26px 14px 20px;
+    border-radius: 26px;
+  }
+
+  :root {
+    --wheel-size: min(82vw, 314px);
+  }
+
+  .hero-title {
+    margin-bottom: 20px;
+    font-size: clamp(2.3rem, 13vw, 3.6rem);
+  }
+
+  .mobile-input-shell {
+    border-radius: 18px;
+  }
+
+  #mobileInput {
+    padding: 20px 16px 20px 48px;
+    font-size: 1.15rem;
+  }
+
+  .login-note {
+    margin: 12px 0 20px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .login-button,
+  .spin-button {
+    border-radius: 20px;
+  }
+
+  .wheel-wrapper {
+    margin-top: 14px;
+  }
+
+  .label-text {
+    max-width: 86%;
+  }
+
+  .coin-icon-single {
+    width: calc(var(--wheel-size, 314px) * 0.13);
+    height: calc(var(--wheel-size, 314px) * 0.13);
+  }
+
+  .coin-icon-medium {
+    width: calc(var(--wheel-size, 314px) * 0.15);
+    height: calc(var(--wheel-size, 314px) * 0.15);
+  }
+
+  .coin-icon-rich {
+    width: calc(var(--wheel-size, 314px) * 0.17);
+    height: calc(var(--wheel-size, 314px) * 0.17);
+  }
+
+  .tester-panel,
+  .rules-card {
+    margin-top: 20px;
+    padding: 18px 16px;
+    border-radius: 20px;
+  }
+
+  .caption-text {
+    font-size: 9px;
+    letter-spacing: 0.22em;
+  }
+
+  .footer-bar {
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .footer-bar button {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+  }
+
   .modal {
     padding: 12px;
   }
