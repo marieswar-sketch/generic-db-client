@@ -105,6 +105,7 @@ function showView(viewName) {
 }
 
 function getCoinSvgMarkup(tone = 'single') {
+  const dLogo = `<text x="54" y="62" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="36" fill="rgba(255,255,255,0.92)" letter-spacing="-1">D</text>`;
   const coins = {
     single: `
       <ellipse cx="54" cy="86" rx="28" ry="9" fill="rgba(123,73,0,0.14)"/>
@@ -113,6 +114,7 @@ function getCoinSvgMarkup(tone = 'single') {
         <circle cx="38" cy="38" r="21" fill="none" stroke="rgba(255,247,196,0.94)" stroke-width="3"/>
         <ellipse cx="28" cy="24" rx="9" ry="6" fill="rgba(255,255,255,0.42)"/>
       </g>
+      ${dLogo}
     `,
     medium: `
       <ellipse cx="54" cy="88" rx="34" ry="10" fill="rgba(123,73,0,0.14)"/>
@@ -128,6 +130,7 @@ function getCoinSvgMarkup(tone = 'single') {
         <circle cx="20" cy="20" r="20" fill="url(#coinGoldMain)"/>
         <circle cx="20" cy="20" r="13.5" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.4"/>
       </g>
+      <text x="50" y="50" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="22" fill="rgba(255,255,255,0.92)">D</text>
     `,
     rich: `
       <ellipse cx="56" cy="92" rx="40" ry="11" fill="rgba(123,73,0,0.16)"/>
@@ -151,6 +154,7 @@ function getCoinSvgMarkup(tone = 'single') {
         <circle cx="18" cy="18" r="18" fill="url(#coinGoldMain)"/>
         <circle cx="18" cy="18" r="12" fill="none" stroke="rgba(255,247,196,0.92)" stroke-width="2.2"/>
       </g>
+      <text x="60" y="42" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="20" fill="rgba(255,255,255,0.92)">D</text>
     `
   };
 

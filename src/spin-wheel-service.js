@@ -15,12 +15,12 @@ const REWARD_OPTIONS = [
   { id: 'airpods', label: 'AIRPODS', reward_coins: 0, icon: '🎧', text: '#ffffff' }
 ];
 const WHEEL_SECTIONS = [
-  { id: 'better_luck_left', reward_key: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
-  { id: '10_coins_top', reward_key: '10_coins', label: '10 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 10 },
-  { id: 'better_luck_right', reward_key: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
-  { id: '50_coins', reward_key: '50_coins', label: '50 COINS', color: '#cfd3d9', icon: '💰', text: '#ffffff', reward_coins: 50 },
-  { id: 'better_luck_bottom', reward_key: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️', text: '#111827', reward_coins: 0 },
-  { id: '10_coins_bottom', reward_key: '10_coins', label: '10 COINS', color: '#fbfaf6', icon: '🪙', text: '#111827', reward_coins: 10 }
+  { id: 'better_luck', reward_key: 'better_luck', label: 'BETTER LUCK', color: '#f5f3eb', icon: '☁️',  text: '#111827', reward_coins: 0   },
+  { id: '10_coins',    reward_key: '10_coins',    label: '10 COINS',    color: '#fbfaf6', icon: '🪙',  text: '#111827', reward_coins: 10  },
+  { id: 'phone',       reward_key: 'phone',       label: 'PHONE',       color: '#cfd3d9', icon: '📱',  text: '#ffffff', reward_coins: 0   },
+  { id: '50_coins',    reward_key: '50_coins',    label: '50 COINS',    color: '#f5f3eb', icon: '💰',  text: '#111827', reward_coins: 50  },
+  { id: 'airpods',     reward_key: 'airpods',     label: 'AIRPODS',     color: '#cfd3d9', icon: '🎧',  text: '#ffffff', reward_coins: 0   },
+  { id: '100_coins',   reward_key: '100_coins',   label: '100 COINS',   color: '#fbfaf6', icon: '🪙',  text: '#111827', reward_coins: 100 },
 ];
 
 function normalizeMobile(value) {
