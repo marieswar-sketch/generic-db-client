@@ -1,0 +1,24 @@
+name: Site Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # every 5 minutes
+  workflow_dispatch:         # allow manual trigger from GitHub UI
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run monitor
+        env:
+          MONITOR_SLACK_WEBHOOK_URL: ${{ secrets.MONITOR_SLACK_WEBHOOK_URL }}
+        run: node scripts/monitor.js
