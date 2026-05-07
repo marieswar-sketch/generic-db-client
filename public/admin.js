@@ -166,17 +166,20 @@ async function loadVisual() {
   // Overview cards
   const o = stats.overview;
   const cards = [
-    { label: 'Total Players', value: o.total_players, sub: `+${o.today_new_players} today`, color: '#6366f1' },
-    { label: 'Total Spins', value: o.total_spins, sub: `${o.today_spins} today`, color: '#22d3ee' },
-    { label: 'Coins Won', value: o.total_coins_won, sub: 'All time', color: '#f59e0b' },
-    { label: 'Coins Transferred', value: o.total_coins_transferred, sub: 'Successfully', color: '#10b981' },
-    { label: 'Pending in Wallets', value: o.pending_coins, sub: 'Not yet transferred', color: '#a855f7' },
+    { label: 'Total Players', value: o.total_players, sub: `+${o.today_new_players} new today`, color: '#6366f1' },
+    { label: 'Today Active', value: o.today_active_players, sub: `${o.today_spins} spins today`, color: '#22d3ee' },
+    { label: 'Total Spins', value: o.total_spins, sub: 'All time', color: '#818cf8' },
+    { label: 'Coins Won', value: o.total_coins_won, sub: `Avg ${o.avg_coins_per_active_player} per active player`, color: '#f59e0b' },
+    { label: 'Coins Transferred', value: o.total_coins_transferred, sub: `${o.total_successful_transfers} successful transfers`, color: '#10b981' },
+    { label: 'Pending in Wallets', value: o.pending_coins, sub: 'Won but not transferred', color: '#a855f7' },
+    { label: 'Transfer Rate', value: `${o.transfer_rate_pct}%`, sub: `${o.players_transferred} of ${o.total_players} players`, color: '#34d399' },
     { label: 'Failed Transfers', value: o.total_failed_transfers, sub: 'Needs attention', color: '#f43f5e' },
+    { label: 'Never Spun', value: o.registered_never_spun, sub: 'Registered but no spin', color: '#64748b' },
   ];
   document.getElementById('overviewCards').innerHTML = cards.map(c => `
     <div class="stat-card" style="border-top:3px solid ${c.color}">
       <p class="stat-label">${c.label}</p>
-      <p class="stat-value" style="color:${c.color}">${Number(c.value).toLocaleString()}</p>
+      <p class="stat-value" style="color:${c.color}">${typeof c.value === 'number' ? Number(c.value).toLocaleString() : c.value}</p>
       <p class="stat-sub">${c.sub}</p>
     </div>`).join('');
 
@@ -186,6 +189,8 @@ async function loadVisual() {
   makeLineChart('chartSpins', 'Spins per Day', fillDates(charts.dailySpins, 'date', 'count'), CHART_COLORS[0]);
   makeBarChart('chartPlayers', 'New Players per Day', fillDates(charts.dailyPlayers, 'date', 'count'), CHART_COLORS[1]);
   makeLineChart('chartDAU', 'Daily Active Users', fillDates(charts.dailyActiveUsers, 'date', 'count'), CHART_COLORS[2]);
+  makeLineChart('chartCoinsWon', 'Coins Won per Day', fillDates(charts.dailyCoinsWon, 'date', 'count'), CHART_COLORS[5]);
+  makeBarChart('chartCoinsTransferred', 'Coins Transferred per Day', fillDates(charts.dailyCoinsTransferred, 'date', 'count'), CHART_COLORS[3]);
 
   // Stacked bar: transfers success vs failed
   const dateMap = {};
@@ -224,10 +229,11 @@ async function loadVisual() {
   const b = behaviour;
   const bCards = [
     { label: 'Full Engagement Today', value: b.full_engagement_today || 0, sub: 'Used all 3 spins today', color: '#10b981' },
-    { label: 'Never Transferred', value: b.never_transferred || 0, sub: 'Coins sitting idle', color: '#f59e0b' },
+    { label: 'Never Transferred', value: b.never_transferred || 0, sub: 'Has coins, never transferred', color: '#f59e0b' },
+    { label: 'Has Coins, Not Transferred', value: b.has_coins_never_transferred || 0, sub: 'Potential lost conversions', color: '#fb923c' },
+    { label: 'Streak Players', value: b.streak_players || 0, sub: '3+ days active this week', color: '#34d399' },
     { label: 'Churned (7 days)', value: b.churned_7days || 0, sub: 'No spin in 7 days', color: '#f43f5e' },
     { label: 'Churned (30 days)', value: b.churned_30days || 0, sub: 'No spin in 30 days', color: '#ef4444' },
-    { label: 'Avg Coins / Player', value: b.avg_coins_per_player || 0, sub: 'Average wallet size', color: '#a855f7' },
   ];
   document.getElementById('behaviourCards').innerHTML = bCards.map(c => `
     <div class="stat-card" style="border-top:3px solid ${c.color}">
@@ -243,9 +249,11 @@ async function loadVisual() {
       <td>${i + 1}</td>
       <td>${p.mobile_number}</td>
       <td>${p.display_name || '—'}</td>
+      <td>${p.total_spins || 0}</td>
       <td>${p.total_coins}</td>
       <td>${p.transferred}</td>
       <td><strong>${p.wallet_balance}</strong></td>
+      <td>${p.last_spin || '—'}</td>
     </tr>`).join('');
 }
 
