@@ -13,6 +13,18 @@ import {
 
 dotenv.config();
 
+async function sendSlackAlert(text) {
+  const url = process.env.SLACK_WEBHOOK_URL;
+  if (!url) return;
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  } catch (_) {}
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, '..', 'public');
@@ -147,6 +159,14 @@ app.post('/api/test/reset', async (req, res) => {
 
 app.get('*', (_req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
+});
+
+// Global error handler — catches unhandled errors and alerts Slack
+app.use((err, req, res, _next) => {
+  const msg = `🚨 *Server error on spinwheel.dostt.in*\n*Route:* ${req.method} ${req.path}\n*Error:* ${err.message}`;
+  console.error(msg);
+  sendSlackAlert(msg);
+  res.status(500).json({ error: err.message });
 });
 
 app.listen(port, () => {

@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "db:create-tables": "node scripts/create-tables.js",
-    "db:test": "node scripts/test-connection.js"
+    "db:test": "node scripts/test-connection.js",
+    "monitor": "node scripts/monitor.js"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
