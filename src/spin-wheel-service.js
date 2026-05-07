@@ -383,18 +383,38 @@ async function lookupExternalUserId(mobileNumber, queryId) {
   }
 
   if (data.job?.id) {
-    for (let index = 0; index < 10; index += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const jobCheck = await fetch(`https://analytics.getlokalapp.com/api/jobs/${data.job.id}`, {
-        headers: { Authorization: `Key ${apiKey}` }
-      });
-      const jobData = await jobCheck.json();
+    // poll every 10 seconds, up to 18 times = 3 minute max wait
+    for (let index = 0; index < 18; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      let jobData;
+      try {
+        const jobCheck = await fetch(`https://analytics.getlokalapp.com/api/jobs/${data.job.id}`, {
+          headers: { Authorization: `Key ${apiKey}` },
+          signal: controller.signal
+        });
+        jobData = await jobCheck.json();
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      console.log(`Redash job ${data.job.id} poll ${index + 1}/18 — status: ${jobData.job.status}`);
 
       if (jobData.job.status === 3) {
-        const finalRes = await fetch(`https://analytics.getlokalapp.com/api/query_results/${jobData.job.query_result_id}`, {
-          headers: { Authorization: `Key ${apiKey}` }
-        });
-        const finalData = await finalRes.json();
+        const finalController = new AbortController();
+        const finalTimeout = setTimeout(() => finalController.abort(), 15000);
+        let finalData;
+        try {
+          const finalRes = await fetch(`https://analytics.getlokalapp.com/api/query_results/${jobData.job.query_result_id}`, {
+            headers: { Authorization: `Key ${apiKey}` },
+            signal: finalController.signal
+          });
+          finalData = await finalRes.json();
+        } finally {
+          clearTimeout(finalTimeout);
+        }
         const match = findMatch(finalData.query_result.data.rows);
         return { userId: match?.user_id || null, reason: match ? null : 'not_registered' };
       }
@@ -403,6 +423,7 @@ async function lookupExternalUserId(mobileNumber, queryId) {
         throw new Error(jobData.job.error || 'Redash job failed');
       }
     }
+    throw new Error('Redash job timed out after 3 minutes');
   }
 
   return { userId: null, reason: 'not_registered' };
@@ -425,13 +446,22 @@ async function uploadCoinsToProvider(userId, amount) {
   formData.append('file', blob, 'transfer.csv');
   formData.append('name', 'Spin the wheel');
 
-  const response = await fetch('https://api.dostt.in/payments/free-coins/upload/', {
-    method: 'POST',
-    headers: { 'x-n8n-auth-key': authKey },
-    body: formData
-  });
-
-  const text = await response.text();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  let response, text;
+  try {
+    response = await fetch('https://api.dostt.in/payments/free-coins/upload/', {
+      method: 'POST',
+      headers: { 'x-n8n-auth-key': authKey },
+      body: formData,
+      signal: controller.signal
+    });
+    text = await response.text();
+  } catch (err) {
+    throw new Error(`Dostt API timed out or failed: ${err.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   return {
     ok: response.ok || text.includes('Bulk upload started'),
