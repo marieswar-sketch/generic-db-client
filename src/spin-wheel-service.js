@@ -807,10 +807,15 @@ export async function retryTransfer(transferId) {
     return { success: false, reason: 'provider_error', message: result.message };
   }
 
-  await runQuery(`
-    INSERT INTO transfer_requests (player_id, coins_requested, status, notes, provider_ref, notify_user)
-    VALUES ($1, $2, 'success', 'Admin retry successful', $3, TRUE)
+  const { rows: inserted } = await runQuery(`
+    INSERT INTO transfer_requests (player_id, coins_requested, status, notes, provider_ref)
+    VALUES ($1, $2, 'success', 'Admin retry successful', $3)
+    RETURNING id
   `, [transfer.pid, walletBalance, result.providerRef]);
+
+  try {
+    await runQuery(`UPDATE transfer_requests SET notify_user = TRUE WHERE id = $1`, [inserted[0].id]);
+  } catch (_) { /* column may not exist yet — safe to skip */ }
 
   await runQuery(`UPDATE transfer_requests SET notes='Superseded by admin retry' WHERE id=$1`, [transferId]);
 
@@ -842,14 +847,16 @@ export async function retryAllFailed(mobileFilter) {
 
 export async function dismissNotification(mobileNumber) {
   const normalizedMobile = normalizeMobile(mobileNumber);
-  await runQuery(`
-    UPDATE transfer_requests tr
-    SET notify_user = FALSE
-    FROM players p
-    WHERE tr.player_id = p.id
-      AND p.mobile_number = $1
-      AND tr.notify_user = TRUE
-  `, [normalizedMobile]);
+  try {
+    await runQuery(`
+      UPDATE transfer_requests tr
+      SET notify_user = FALSE
+      FROM players p
+      WHERE tr.player_id = p.id
+        AND p.mobile_number = $1
+        AND tr.notify_user = TRUE
+    `, [normalizedMobile]);
+  } catch (_) { /* column may not exist yet */ }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
