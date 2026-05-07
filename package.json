@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "db:create-tables": "node scripts/create-tables.js",
+    "db:migrate-notify": "node scripts/add-notify-column.js",
     "db:test": "node scripts/test-connection.js",
     "monitor": "node scripts/monitor.js",
     "monitor:watch": "node scripts/monitor.js --watch"

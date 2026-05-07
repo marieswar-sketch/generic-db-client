@@ -4,10 +4,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   createTransferRequest,
+  dismissNotification,
+  getAdminStats,
+  getAdminTableData,
   getPlayerState,
   getPublicConfig,
   registerPlayer,
   resetTestData,
+  retryAllFailed,
+  retryTransfer,
   spinForPlayer
 } from './spin-wheel-service.js';
 
@@ -146,6 +151,75 @@ app.post('/api/transfers', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+// ─── Admin Routes ────────────────────────────────────────────────────────────
+
+function requireAdmin(req, res, next) {
+  const user = req.headers['x-admin-user'];
+  const pass = req.headers['x-admin-pass'];
+  if (user === process.env.ADMIN_USERNAME && pass === process.env.ADMIN_PASSWORD) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body;
+  if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+    return res.json({ success: true });
+  }
+  res.status(401).json({ error: 'Invalid credentials' });
+});
+
+app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
+  try {
+    const stats = await getAdminStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/data/:type', requireAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const filters = { status: req.query.status, date: req.query.date, mobile: req.query.mobile };
+    const data = await getAdminTableData(type, filters);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/transfers/:id/retry', requireAdmin, async (req, res) => {
+  try {
+    const result = await retryTransfer(Number(req.params.id));
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/admin/retry-all', requireAdmin, async (req, res) => {
+  try {
+    const results = await retryAllFailed(req.body.mobile || null);
+    res.json({ results });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/players/:mobileNumber/dismiss-notification', async (req, res) => {
+  try {
+    await dismissNotification(req.params.mobileNumber);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// serve admin panel
+app.get('/admin', (_req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.post('/api/test/reset', async (req, res) => {
   try {
