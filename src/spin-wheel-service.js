@@ -575,10 +575,15 @@ export async function getAdminStats() {
       (SELECT COUNT(*)::int FROM players) AS total_players,
       (SELECT COUNT(*)::int FROM players WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS today_new_players,
       (SELECT COUNT(*)::int FROM spin_events) AS total_spins,
-      (SELECT COUNT(*)::int FROM spin_events WHERE spin_date = CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS today_spins,
+      (SELECT COUNT(*)::int FROM spin_events WHERE spin_date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date) AS today_spins,
+      (SELECT COUNT(DISTINCT player_id)::int FROM spin_events WHERE spin_date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date) AS today_active_players,
       (SELECT COALESCE(SUM(total_coins),0)::int FROM players) AS total_coins_won,
-      (SELECT COALESCE(SUM(coins_requested),0)::int FROM transfer_requests WHERE status IN ('success','mock_success')) AS total_coins_transferred,
-      (SELECT COUNT(*)::int FROM transfer_requests WHERE status IN ('failed_provider','failed_not_registered')) AS total_failed_transfers
+      (SELECT COALESCE(SUM(coins_requested),0)::int FROM transfer_requests WHERE status IN ('submitted','success','mock_success')) AS total_coins_transferred,
+      (SELECT COUNT(*)::int FROM transfer_requests WHERE status IN ('failed_provider','failed_not_registered')) AS total_failed_transfers,
+      (SELECT COUNT(*)::int FROM transfer_requests WHERE status IN ('submitted','success','mock_success')) AS total_successful_transfers,
+      (SELECT COUNT(DISTINCT player_id)::int FROM transfer_requests WHERE status IN ('submitted','success','mock_success')) AS players_transferred,
+      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (SELECT DISTINCT player_id FROM spin_events)) AS registered_never_spun,
+      (SELECT ROUND(AVG(total_coins)::numeric,1) FROM players WHERE total_coins > 0) AS avg_coins_per_active_player
   `);
 
   const { rows: dailySpins } = await runQuery(`
@@ -618,6 +623,22 @@ export async function getAdminStats() {
     GROUP BY spin_date ORDER BY spin_date
   `);
 
+  const { rows: dailyCoinsWon } = await runQuery(`
+    SELECT spin_date::text AS date, COALESCE(SUM(coin_value),0)::int AS count
+    FROM spin_events
+    WHERE spin_date >= CURRENT_DATE - INTERVAL '29 days'
+    GROUP BY spin_date ORDER BY spin_date
+  `);
+
+  const { rows: dailyCoinsTransferred } = await runQuery(`
+    SELECT DATE(created_at AT TIME ZONE 'Asia/Kolkata')::text AS date,
+           COALESCE(SUM(coins_requested),0)::int AS count
+    FROM transfer_requests
+    WHERE status IN ('submitted','success','mock_success')
+      AND created_at >= NOW() - INTERVAL '29 days'
+    GROUP BY DATE(created_at AT TIME ZONE 'Asia/Kolkata') ORDER BY date
+  `);
+
   // Retention
   const { rows: retentionRows } = await runQuery(`
     SELECT
@@ -645,26 +666,51 @@ export async function getAdminStats() {
   // Player behaviour
   const { rows: behaviour } = await runQuery(`
     SELECT
-      (SELECT COUNT(DISTINCT player_id)::int FROM spin_events WHERE spin_date = CURRENT_DATE AT TIME ZONE 'Asia/Kolkata' GROUP BY player_id HAVING COUNT(*) >= 3 LIMIT 1) AS full_engagement_today,
-      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (SELECT DISTINCT player_id FROM transfer_requests WHERE status IN ('success','mock_success'))) AS never_transferred,
-      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (SELECT DISTINCT player_id FROM spin_events WHERE spin_date >= CURRENT_DATE - 7)) AS churned_7days,
-      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (SELECT DISTINCT player_id FROM spin_events WHERE spin_date >= CURRENT_DATE - 30)) AS churned_30days,
-      (SELECT COALESCE(AVG(total_coins),0)::numeric(10,1) FROM players) AS avg_coins_per_player
+      (SELECT COUNT(*)::int FROM (
+        SELECT player_id FROM spin_events
+        WHERE spin_date = (NOW() AT TIME ZONE 'Asia/Kolkata')::date
+        GROUP BY player_id HAVING COUNT(*) >= 3
+      ) x) AS full_engagement_today,
+      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (
+        SELECT DISTINCT player_id FROM transfer_requests WHERE status IN ('submitted','success','mock_success')
+      )) AS never_transferred,
+      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (
+        SELECT DISTINCT player_id FROM spin_events WHERE spin_date >= (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 7
+      )) AS churned_7days,
+      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (
+        SELECT DISTINCT player_id FROM spin_events WHERE spin_date >= (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 30
+      )) AS churned_30days,
+      (SELECT COUNT(*)::int FROM players WHERE total_coins > 0 AND id NOT IN (
+        SELECT DISTINCT player_id FROM transfer_requests WHERE status IN ('submitted','success','mock_success')
+      )) AS has_coins_never_transferred,
+      (SELECT COUNT(*)::int FROM players WHERE id IN (
+        SELECT player_id FROM spin_events
+        GROUP BY player_id
+        HAVING COUNT(DISTINCT spin_date) >= 3
+           AND MAX(spin_date) >= (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 7
+      )) AS streak_players
   `);
 
   const { rows: topPlayers } = await runQuery(`
     SELECT p.mobile_number, p.display_name,
            p.total_coins,
-           COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0)::int AS transferred,
-           (p.total_coins - COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0))::int AS wallet_balance
+           COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr
+             WHERE tr.player_id=p.id AND tr.status IN ('submitted','success','mock_success')),0)::int AS transferred,
+           (p.total_coins - COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr
+             WHERE tr.player_id=p.id AND tr.status IN ('submitted','success','mock_success')),0))::int AS wallet_balance,
+           (SELECT COUNT(*)::int FROM spin_events se WHERE se.player_id=p.id) AS total_spins,
+           (SELECT MAX(spin_date)::text FROM spin_events se WHERE se.player_id=p.id) AS last_spin
     FROM players p ORDER BY p.total_coins DESC LIMIT 10
   `);
 
   const pendingCoins = (overview[0].total_coins_won || 0) - (overview[0].total_coins_transferred || 0);
+  const transferRate = overview[0].total_players > 0
+    ? Math.round((overview[0].players_transferred / overview[0].total_players) * 100)
+    : 0;
 
   return {
-    overview: { ...overview[0], pending_coins: Math.max(0, pendingCoins) },
-    charts: { dailySpins, dailyPlayers, dailyTransfers, rewardsBreakdown, transferStatusBreakdown, dailyActiveUsers },
+    overview: { ...overview[0], pending_coins: Math.max(0, pendingCoins), transfer_rate_pct: transferRate },
+    charts: { dailySpins, dailyPlayers, dailyTransfers, rewardsBreakdown, transferStatusBreakdown, dailyActiveUsers, dailyCoinsWon, dailyCoinsTransferred },
     retention: retentionRows[0] || {},
     behaviour: { ...behaviour[0], topPlayers },
   };
@@ -674,8 +720,8 @@ export async function getAdminTableData(type, filters = {}) {
   if (type === 'players') {
     const { rows } = await runQuery(`
       SELECT p.id, p.mobile_number, p.display_name, p.total_coins,
-             COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0)::int AS transferred_coins,
-             (p.total_coins - COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0))::int AS wallet_balance,
+             COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('submitted','success','mock_success')),0)::int AS transferred_coins,
+             (p.total_coins - COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('submitted','success','mock_success')),0))::int AS wallet_balance,
              (SELECT COUNT(*)::int FROM spin_events se WHERE se.player_id=p.id) AS total_spins,
              p.created_at AT TIME ZONE 'Asia/Kolkata' AS created_at
       FROM players p ORDER BY p.created_at DESC LIMIT 5000
