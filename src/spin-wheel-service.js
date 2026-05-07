@@ -205,6 +205,13 @@ export async function getPlayerState(mobileNumber) {
     const transferredCoins = await getTransferredCoins(client, player.id);
     const recentSpins = await getRecentSpins(client, player.id);
 
+    const notifResult = await client.query(
+      `SELECT id, coins_requested FROM transfer_requests
+       WHERE player_id=$1 AND notify_user=TRUE ORDER BY created_at DESC LIMIT 1`,
+      [player.id]
+    );
+    const pendingNotification = notifResult.rows[0] || null;
+
     return {
       id: player.id,
       mobile_number: player.mobile_number,
@@ -213,7 +220,8 @@ export async function getPlayerState(mobileNumber) {
       max_spins: DAILY_SPIN_LIMIT,
       total_winnings: Math.max(0, Number(player.total_coins) - transferredCoins),
       transferred_today: transferredToday,
-      recent_spins: recentSpins
+      recent_spins: recentSpins,
+      pending_notification: pendingNotification
     };
   });
 }
@@ -555,6 +563,247 @@ export async function createTransferRequest(mobileNumber, coinsRequested) {
     };
   });
 }
+
+// ─── Admin Service Functions ────────────────────────────────────────────────
+
+export async function getAdminStats() {
+  const { rows: overview } = await runQuery(`
+    SELECT
+      (SELECT COUNT(*)::int FROM players) AS total_players,
+      (SELECT COUNT(*)::int FROM players WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS today_new_players,
+      (SELECT COUNT(*)::int FROM spin_events) AS total_spins,
+      (SELECT COUNT(*)::int FROM spin_events WHERE spin_date = CURRENT_DATE AT TIME ZONE 'Asia/Kolkata') AS today_spins,
+      (SELECT COALESCE(SUM(total_coins),0)::int FROM players) AS total_coins_won,
+      (SELECT COALESCE(SUM(coins_requested),0)::int FROM transfer_requests WHERE status IN ('success','mock_success')) AS total_coins_transferred,
+      (SELECT COUNT(*)::int FROM transfer_requests WHERE status IN ('failed_provider','failed_not_registered')) AS total_failed_transfers
+  `);
+
+  const { rows: dailySpins } = await runQuery(`
+    SELECT spin_date::text AS date, COUNT(*)::int AS count
+    FROM spin_events
+    WHERE spin_date >= CURRENT_DATE - INTERVAL '29 days'
+    GROUP BY spin_date ORDER BY spin_date
+  `);
+
+  const { rows: dailyPlayers } = await runQuery(`
+    SELECT DATE(created_at AT TIME ZONE 'Asia/Kolkata')::text AS date, COUNT(*)::int AS count
+    FROM players
+    WHERE created_at >= NOW() - INTERVAL '29 days'
+    GROUP BY DATE(created_at AT TIME ZONE 'Asia/Kolkata') ORDER BY date
+  `);
+
+  const { rows: dailyTransfers } = await runQuery(`
+    SELECT DATE(created_at AT TIME ZONE 'Asia/Kolkata')::text AS date,
+           status, COUNT(*)::int AS count
+    FROM transfer_requests
+    WHERE created_at >= NOW() - INTERVAL '29 days'
+    GROUP BY DATE(created_at AT TIME ZONE 'Asia/Kolkata'), status ORDER BY date
+  `);
+
+  const { rows: rewardsBreakdown } = await runQuery(`
+    SELECT reward_key, COUNT(*)::int AS count FROM spin_events GROUP BY reward_key
+  `);
+
+  const { rows: transferStatusBreakdown } = await runQuery(`
+    SELECT status, COUNT(*)::int AS count FROM transfer_requests GROUP BY status
+  `);
+
+  const { rows: dailyActiveUsers } = await runQuery(`
+    SELECT spin_date::text AS date, COUNT(DISTINCT player_id)::int AS count
+    FROM spin_events
+    WHERE spin_date >= CURRENT_DATE - INTERVAL '29 days'
+    GROUP BY spin_date ORDER BY spin_date
+  `);
+
+  // Retention
+  const { rows: retentionRows } = await runQuery(`
+    SELECT
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d1) / NULLIF(COUNT(*),0), 1) AS day1,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d3) / NULLIF(COUNT(*) FILTER (WHERE eligible_d3),0), 1) AS day3,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d7) / NULLIF(COUNT(*) FILTER (WHERE eligible_d7),0), 1) AS day7,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d14) / NULLIF(COUNT(*) FILTER (WHERE eligible_d14),0), 1) AS day14,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d30) / NULLIF(COUNT(*) FILTER (WHERE eligible_d30),0), 1) AS day30
+    FROM (
+      SELECT
+        p.id,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 1) AS has_d1,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 3) AS has_d3,
+        p.created_at < NOW() - INTERVAL '3 days' AS eligible_d3,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 7) AS has_d7,
+        p.created_at < NOW() - INTERVAL '7 days' AS eligible_d7,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 14) AS has_d14,
+        p.created_at < NOW() - INTERVAL '14 days' AS eligible_d14,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 30) AS has_d30,
+        p.created_at < NOW() - INTERVAL '30 days' AS eligible_d30
+      FROM players p WHERE p.created_at < NOW() - INTERVAL '1 day'
+    ) t
+  `);
+
+  // Player behaviour
+  const { rows: behaviour } = await runQuery(`
+    SELECT
+      (SELECT COUNT(DISTINCT player_id)::int FROM spin_events WHERE spin_date = CURRENT_DATE AT TIME ZONE 'Asia/Kolkata' GROUP BY player_id HAVING COUNT(*) >= 3 LIMIT 1) AS full_engagement_today,
+      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (SELECT DISTINCT player_id FROM transfer_requests WHERE status IN ('success','mock_success'))) AS never_transferred,
+      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (SELECT DISTINCT player_id FROM spin_events WHERE spin_date >= CURRENT_DATE - 7)) AS churned_7days,
+      (SELECT COUNT(*)::int FROM players WHERE id NOT IN (SELECT DISTINCT player_id FROM spin_events WHERE spin_date >= CURRENT_DATE - 30)) AS churned_30days,
+      (SELECT COALESCE(AVG(total_coins),0)::numeric(10,1) FROM players) AS avg_coins_per_player
+  `);
+
+  const { rows: topPlayers } = await runQuery(`
+    SELECT p.mobile_number, p.display_name,
+           p.total_coins,
+           COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0)::int AS transferred,
+           (p.total_coins - COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0))::int AS wallet_balance
+    FROM players p ORDER BY p.total_coins DESC LIMIT 10
+  `);
+
+  const pendingCoins = (overview[0].total_coins_won || 0) - (overview[0].total_coins_transferred || 0);
+
+  return {
+    overview: { ...overview[0], pending_coins: Math.max(0, pendingCoins) },
+    charts: { dailySpins, dailyPlayers, dailyTransfers, rewardsBreakdown, transferStatusBreakdown, dailyActiveUsers },
+    retention: retentionRows[0] || {},
+    behaviour: { ...behaviour[0], topPlayers },
+  };
+}
+
+export async function getAdminTableData(type, filters = {}) {
+  if (type === 'players') {
+    const { rows } = await runQuery(`
+      SELECT p.id, p.mobile_number, p.display_name, p.total_coins,
+             COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0)::int AS transferred_coins,
+             (p.total_coins - COALESCE((SELECT SUM(tr.coins_requested) FROM transfer_requests tr WHERE tr.player_id=p.id AND tr.status IN ('success','mock_success')),0))::int AS wallet_balance,
+             (SELECT COUNT(*)::int FROM spin_events se WHERE se.player_id=p.id) AS total_spins,
+             p.created_at AT TIME ZONE 'Asia/Kolkata' AS created_at
+      FROM players p ORDER BY p.created_at DESC LIMIT 5000
+    `);
+    return rows;
+  }
+
+  if (type === 'spins') {
+    const dateFilter = filters.date ? `AND se.spin_date = $1::date` : '';
+    const params = filters.date ? [filters.date] : [];
+    const { rows } = await runQuery(`
+      SELECT se.id, p.mobile_number, p.display_name, se.reward_key, se.reward_label,
+             se.coin_value, se.spin_date, se.created_at AT TIME ZONE 'Asia/Kolkata' AS created_at
+      FROM spin_events se
+      JOIN players p ON p.id = se.player_id
+      WHERE 1=1 ${dateFilter}
+      ORDER BY se.created_at DESC LIMIT 10000
+    `, params);
+    return rows;
+  }
+
+  if (type === 'transfers') {
+    const conditions = ['1=1'];
+    const params = [];
+    if (filters.status) { params.push(filters.status); conditions.push(`tr.status = $${params.length}`); }
+    if (filters.date) { params.push(filters.date); conditions.push(`DATE(tr.created_at AT TIME ZONE 'Asia/Kolkata') = $${params.length}::date`); }
+    if (filters.mobile) { params.push(`%${filters.mobile}%`); conditions.push(`p.mobile_number LIKE $${params.length}`); }
+    const { rows } = await runQuery(`
+      SELECT tr.id, p.mobile_number, p.display_name, tr.coins_requested, tr.status,
+             tr.error_message, tr.notes, tr.provider_ref, tr.notify_user,
+             tr.created_at AT TIME ZONE 'Asia/Kolkata' AS created_at,
+             (p.total_coins - COALESCE((SELECT SUM(tr2.coins_requested) FROM transfer_requests tr2 WHERE tr2.player_id=p.id AND tr2.status IN ('success','mock_success','submitted')),0))::int AS wallet_balance
+      FROM transfer_requests tr
+      JOIN players p ON p.id = tr.player_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY tr.created_at DESC LIMIT 5000
+    `, params);
+    return rows;
+  }
+
+  return [];
+}
+
+export async function retryTransfer(transferId) {
+  const { rows } = await runQuery(`
+    SELECT tr.*, p.mobile_number, p.total_coins, p.id AS pid
+    FROM transfer_requests tr
+    JOIN players p ON p.id = tr.player_id
+    WHERE tr.id = $1
+  `, [transferId]);
+
+  if (!rows[0]) throw new Error('Transfer not found');
+
+  const transfer = rows[0];
+  if (!['failed_provider', 'failed_not_registered'].includes(transfer.status)) {
+    throw new Error('Transfer is not in a failed state');
+  }
+
+  const { rows: tcRows } = await runQuery(`
+    SELECT COALESCE(SUM(coins_requested),0)::int AS transferred
+    FROM transfer_requests WHERE player_id=$1 AND status IN ('submitted','success','mock_success')
+  `, [transfer.pid]);
+
+  const walletBalance = Math.max(0, Number(transfer.total_coins) - tcRows[0].transferred);
+  if (walletBalance <= 0) {
+    return { success: false, reason: 'no_balance', message: 'Player has no coins to transfer' };
+  }
+
+  const retryQueryId = process.env.RETRY_REDASH_QUERY_ID;
+  const lookup = await lookupExternalUserId(transfer.mobile_number, retryQueryId);
+
+  if (!lookup.userId) {
+    await runQuery(`UPDATE transfer_requests SET error_message=$1, notes=$2 WHERE id=$3`,
+      ['Retry: user not found in Dostt system', 'Admin retry failed — not registered', transferId]);
+    return { success: false, reason: 'not_registered' };
+  }
+
+  const result = await uploadCoinsToProvider(lookup.userId, walletBalance);
+
+  if (!result.ok) {
+    await runQuery(`UPDATE transfer_requests SET error_message=$1, notes=$2 WHERE id=$3`,
+      [result.message || 'Provider error on retry', 'Admin retry failed — provider error', transferId]);
+    return { success: false, reason: 'provider_error', message: result.message };
+  }
+
+  await runQuery(`
+    INSERT INTO transfer_requests (player_id, coins_requested, status, notes, provider_ref, notify_user)
+    VALUES ($1, $2, 'success', 'Admin retry successful', $3, TRUE)
+  `, [transfer.pid, walletBalance, result.providerRef]);
+
+  await runQuery(`UPDATE transfer_requests SET notes='Superseded by admin retry' WHERE id=$1`, [transferId]);
+
+  await notifySlack(`✅ Admin Retry Success\nMobile: ${transfer.mobile_number}\nCoins: ${walletBalance}\nRef: ${result.providerRef}`);
+
+  return { success: true, coins: walletBalance };
+}
+
+export async function retryAllFailed(mobileFilter) {
+  const conditions = [`tr.status IN ('failed_provider','failed_not_registered')`];
+  const params = [];
+  if (mobileFilter) { params.push(`%${mobileFilter}%`); conditions.push(`p.mobile_number LIKE $${params.length}`); }
+
+  const { rows: failed } = await runQuery(`
+    SELECT DISTINCT ON (tr.player_id) tr.id
+    FROM transfer_requests tr
+    JOIN players p ON p.id = tr.player_id
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY tr.player_id, tr.created_at DESC
+  `, params);
+
+  const results = [];
+  for (const row of failed) {
+    const r = await retryTransfer(row.id);
+    results.push({ id: row.id, ...r });
+  }
+  return results;
+}
+
+export async function dismissNotification(mobileNumber) {
+  const normalizedMobile = normalizeMobile(mobileNumber);
+  await runQuery(`
+    UPDATE transfer_requests tr
+    SET notify_user = FALSE
+    FROM players p
+    WHERE tr.player_id = p.id
+      AND p.mobile_number = $1
+      AND tr.notify_user = TRUE
+  `, [normalizedMobile]);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 export async function resetTestData(mobileNumber) {
   const normalizedMobile = normalizeMobile(mobileNumber);

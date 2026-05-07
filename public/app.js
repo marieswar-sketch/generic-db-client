@@ -366,6 +366,12 @@ async function refreshState() {
     state.spinState = data;
     showError('');
     renderLoggedInUi();
+    if (data.pending_notification) {
+      const coins = data.pending_notification.coins_requested;
+      document.getElementById('notificationText').innerHTML =
+        `Your <strong>${coins} coins</strong> have been transferred to your Dostt Wallet successfully! 🎉`;
+      document.getElementById('notificationModal').classList.remove('hidden');
+    }
   } catch (error) {
     if (error.message === 'Player not found') {
       await fetchJson('/api/players/register', {
@@ -568,6 +574,14 @@ async function init() {
   elements.closeTermsButton.addEventListener('click', () => elements.termsModal.classList.add('hidden'));
   elements.closeRewardButton.addEventListener('click', () => elements.rewardModal.classList.add('hidden'));
   elements.closeTransferButton.addEventListener('click', () => elements.transferModal.classList.add('hidden'));
+
+  const closeNotifBtn = document.getElementById('closeNotificationButton');
+  if (closeNotifBtn) {
+    closeNotifBtn.addEventListener('click', async () => {
+      document.getElementById('notificationModal').classList.add('hidden');
+      await fetch(`/api/players/${state.mobileNumber}/dismiss-notification`, { method: 'POST' });
+    });
+  }
 
   if (state.isLoggedIn) {
     await refreshState();
