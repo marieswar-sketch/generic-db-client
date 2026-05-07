@@ -2,8 +2,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const SITE_URL = process.env.SITE_URL || 'https://spinwheel.dostt.in';
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+const SLACK_WEBHOOK_URL = process.env.MONITOR_SLACK_WEBHOOK_URL;
 const SLOW_THRESHOLD_MS = 5000;
+const WATCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 const checks = [
   {
@@ -47,7 +48,7 @@ async function runCheck(check) {
 
 async function sendSlackAlert(failures) {
   if (!SLACK_WEBHOOK_URL) {
-    console.error('SLACK_WEBHOOK_URL not set — skipping Slack alert');
+    console.error('MONITOR_SLACK_WEBHOOK_URL not set — skipping Slack alert');
     return;
   }
 
@@ -70,8 +71,8 @@ async function sendSlackAlert(failures) {
   }
 }
 
-async function main() {
-  console.log(`Monitoring ${SITE_URL} — ${new Date().toISOString()}\n`);
+async function runOnce() {
+  console.log(`[${new Date().toISOString()}] Checking ${SITE_URL}...`);
 
   const results = await Promise.all(checks.map(runCheck));
   const failures = results.filter(r => !r.ok);
@@ -83,15 +84,24 @@ async function main() {
   }
 
   if (failures.length > 0) {
-    console.log(`\n${failures.length} check(s) failed. Sending Slack alert...`);
+    console.log(`  → ${failures.length} check(s) failed. Sending Slack alert...\n`);
     await sendSlackAlert(failures);
-    process.exit(1);
+    return false;
   } else {
-    console.log('\nAll checks passed ✓');
+    console.log(`  → All checks passed ✓\n`);
+    return true;
   }
 }
 
-main().catch(err => {
-  console.error('Monitor crashed:', err);
-  process.exit(1);
-});
+const watchMode = process.argv.includes('--watch');
+
+if (watchMode) {
+  console.log(`🔁 Watch mode — checking every 5 minutes. Press Ctrl+C to stop.\n`);
+  runOnce();
+  setInterval(runOnce, WATCH_INTERVAL_MS);
+} else {
+  runOnce().then(ok => process.exit(ok ? 0 : 1)).catch(err => {
+    console.error('Monitor crashed:', err);
+    process.exit(1);
+  });
+}
