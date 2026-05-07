@@ -205,12 +205,15 @@ export async function getPlayerState(mobileNumber) {
     const transferredCoins = await getTransferredCoins(client, player.id);
     const recentSpins = await getRecentSpins(client, player.id);
 
-    const notifResult = await client.query(
-      `SELECT id, coins_requested FROM transfer_requests
-       WHERE player_id=$1 AND notify_user=TRUE ORDER BY created_at DESC LIMIT 1`,
-      [player.id]
-    );
-    const pendingNotification = notifResult.rows[0] || null;
+    let pendingNotification = null;
+    try {
+      const notifResult = await client.query(
+        `SELECT id, coins_requested FROM transfer_requests
+         WHERE player_id=$1 AND notify_user=TRUE ORDER BY created_at DESC LIMIT 1`,
+        [player.id]
+      );
+      pendingNotification = notifResult.rows[0] || null;
+    } catch (_) {}
 
     return {
       id: player.id,
