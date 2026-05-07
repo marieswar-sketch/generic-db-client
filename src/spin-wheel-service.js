@@ -751,9 +751,9 @@ export async function getAdminTableData(type, filters = {}) {
     if (filters.mobile) { params.push(`%${filters.mobile}%`); conditions.push(`p.mobile_number LIKE $${params.length}`); }
     const { rows } = await runQuery(`
       SELECT tr.id, p.mobile_number, p.display_name, tr.coins_requested, tr.status,
-             tr.error_message, tr.notes, tr.provider_ref, tr.notify_user,
+             tr.error_message, tr.notes, tr.provider_ref,
              tr.created_at AT TIME ZONE 'Asia/Kolkata' AS created_at,
-             (p.total_coins - COALESCE((SELECT SUM(tr2.coins_requested) FROM transfer_requests tr2 WHERE tr2.player_id=p.id AND tr2.status IN ('success','mock_success','submitted')),0))::int AS wallet_balance
+             (p.total_coins - COALESCE((SELECT SUM(tr2.coins_requested) FROM transfer_requests tr2 WHERE tr2.player_id=p.id AND tr2.status IN ('submitted','success','mock_success')),0))::int AS wallet_balance
       FROM transfer_requests tr
       JOIN players p ON p.id = tr.player_id
       WHERE ${conditions.join(' AND ')}
