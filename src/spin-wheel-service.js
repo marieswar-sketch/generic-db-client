@@ -346,9 +346,8 @@ async function notifySlack(message) {
   }
 }
 
-async function lookupExternalUserId(mobileNumber) {
+async function lookupExternalUserId(mobileNumber, queryId) {
   const apiKey = process.env.REDASH_API_KEY;
-  const queryId = process.env.REDASH_QUERY_ID;
 
   if (!apiKey || !queryId) {
     return { userId: null, reason: 'lookup_not_configured' };
@@ -468,7 +467,22 @@ export async function createTransferRequest(mobileNumber, coinsRequested) {
       notes = 'Mock transfer completed locally';
       providerRef = 'mock-transfer';
     } else {
-      const lookup = await lookupExternalUserId(normalizedMobile);
+      const queryIds = [
+        process.env.REDASH_QUERY_ID,
+        process.env.REDASH_QUERY_ID_2,
+        process.env.REDASH_QUERY_ID_3
+      ].filter(Boolean);
+
+      let lookup = { userId: null, reason: 'lookup_not_configured' };
+      let usedQueryId = null;
+
+      for (const qId of queryIds) {
+        if (lookup.userId) break;
+        if (usedQueryId) await new Promise((resolve) => setTimeout(resolve, 1500));
+        lookup = await lookupExternalUserId(normalizedMobile, qId);
+        if (lookup.userId) usedQueryId = qId;
+        else usedQueryId = qId;
+      }
 
       if (!lookup.userId) {
         status = 'failed_not_registered';
@@ -484,7 +498,7 @@ export async function createTransferRequest(mobileNumber, coinsRequested) {
           [player.id, coinsRequested, status, notes, errorMessage]
         );
 
-        await notifySlack(`⚠️ Spin Wheel Transfer Failed\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nReason: ${errorMessage}`);
+        await notifySlack(`⚠️ Spin Wheel Transfer Failed\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nReason: ${errorMessage}\nQueries tried: ${queryIds.join(', ')}`);
         return {
           ...failedResult.rows[0],
           public_error: errorMessage
@@ -508,7 +522,7 @@ export async function createTransferRequest(mobileNumber, coinsRequested) {
           [player.id, coinsRequested, status, notes, errorMessage, providerRef]
         );
 
-        await notifySlack(`⚠️ Spin Wheel Transfer Failed\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nReason: ${errorMessage}`);
+        await notifySlack(`⚠️ Spin Wheel Transfer Failed\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nReason: ${errorMessage}\nQuery used: ${usedQueryId}`);
         return {
           ...failedResult.rows[0],
           public_error: 'We could not complete the transfer right now. Please try again shortly.'
@@ -516,7 +530,7 @@ export async function createTransferRequest(mobileNumber, coinsRequested) {
       }
 
       notes = providerResult.message || 'Transfer submitted to provider';
-      await notifySlack(`🚀 Spin Wheel Transfer Submitted\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nProvider Ref: ${providerRef}`);
+      await notifySlack(`🚀 Spin Wheel Transfer Submitted\nMobile: +${normalizedMobile}\nCoins: ${coinsRequested}\nProvider Ref: ${providerRef}\nQuery used: ${usedQueryId}`);
     }
 
     const transferResult = await client.query(
