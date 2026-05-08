@@ -175,6 +175,8 @@ async function loadVisual() {
     { label: 'Transfer Rate', value: `${o.transfer_rate_pct}%`, sub: `${o.players_transferred} of ${o.total_players} players`, color: '#34d399' },
     { label: 'Failed Transfers', value: o.total_failed_transfers, sub: 'Needs attention', color: '#f43f5e' },
     { label: 'Never Spun', value: o.registered_never_spun, sub: 'Registered but no spin', color: '#64748b' },
+    { label: 'Absolute Cost', value: `₹${Number(o.absolute_cost).toLocaleString()}`, sub: 'Coins transferred × ₹0.22', color: '#e11d48' },
+    { label: 'Net Cost', value: `₹${Number(o.net_cost).toLocaleString()}`, sub: 'Coins transferred × ₹0.10', color: '#be185d' },
   ];
   document.getElementById('overviewCards').innerHTML = cards.map(c => `
     <div class="stat-card" style="border-top:3px solid ${c.color}">
@@ -215,15 +217,33 @@ async function loadVisual() {
   const rlValues = charts.rewardsBreakdown.map(r => Number(r.count));
   makePieChart('chartRewards', rlLabels, rlValues);
 
-  // Retention bar
+  // Retention bar — show sample size in label, hide bars with n<10 (unreliable)
   const retData = [
-    { label: 'Day 1', value: Number(retention.day1) || 0 },
-    { label: 'Day 3', value: Number(retention.day3) || 0 },
-    { label: 'Day 7', value: Number(retention.day7) || 0 },
-    { label: 'Day 14', value: Number(retention.day14) || 0 },
-    { label: 'Day 30', value: Number(retention.day30) || 0 },
+    { label: `Day 1 (n=${retention.n_d1||0})`, value: Number(retention.day1) || 0, n: retention.n_d1 || 0 },
+    { label: `Day 3 (n=${retention.n_d3||0})`, value: Number(retention.day3) || 0, n: retention.n_d3 || 0 },
+    { label: `Day 7 (n=${retention.n_d7||0})`, value: Number(retention.day7) || 0, n: retention.n_d7 || 0 },
+    { label: `Day 14 (n=${retention.n_d14||0})`, value: Number(retention.day14) || 0, n: retention.n_d14 || 0 },
+    { label: `Day 30 (n=${retention.n_d30||0})`, value: Number(retention.day30) || 0, n: retention.n_d30 || 0 },
   ];
-  makeBarChart('chartRetention', 'Retention %', retData, CHART_COLORS[3]);
+  // grey out bars where sample too small to be meaningful
+  const retColors = retData.map(d => d.n < 10 ? '#475569cc' : CHART_COLORS[3] + 'cc');
+  const ctx = document.getElementById('chartRetention');
+  if (ctx._chart) ctx._chart.destroy();
+  ctx._chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: retData.map(d => d.label),
+      datasets: [{ label: 'Retention % (within N days)', data: retData.map(d => d.value), backgroundColor: retColors, borderRadius: 4 }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#e2e8f0' } },
+        tooltip: { callbacks: { afterLabel: (ctx) => retData[ctx.dataIndex].n < 10 ? '⚠️ Small sample — not reliable' : '' } }
+      },
+      scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' }, beginAtZero: true, max: 100 } }
+    },
+  });
 
   // Behaviour cards
   const b = behaviour;
@@ -314,15 +334,30 @@ document.getElementById('ftDownloadBtn').addEventListener('click', () => {
 let failedCache = [];
 
 async function loadFailedTransfers(filters = {}) {
-  const params = new URLSearchParams({ status: 'failed_provider' });
-  if (filters.date) params.set('date', filters.date);
-  if (filters.mobile) params.set('mobile', filters.mobile);
+  const qs = (status) => {
+    const p = new URLSearchParams({ status });
+    if (filters.date) p.set('date', filters.date);
+    if (filters.mobile) p.set('mobile', filters.mobile);
+    return p.toString();
+  };
 
   const [failed1, failed2] = await Promise.all([
-    API.get(`/api/admin/data/transfers?status=failed_provider${filters.date ? `&date=${filters.date}` : ''}${filters.mobile ? `&mobile=${filters.mobile}` : ''}`),
-    API.get(`/api/admin/data/transfers?status=failed_not_registered${filters.date ? `&date=${filters.date}` : ''}${filters.mobile ? `&mobile=${filters.mobile}` : ''}`),
+    API.get(`/api/admin/data/transfers?${qs('failed_provider')}`),
+    API.get(`/api/admin/data/transfers?${qs('failed_not_registered')}`),
   ]);
   failedCache = [...failed1, ...failed2].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  // Show filter status
+  const filterParts = [];
+  if (filters.date) filterParts.push(`date: ${filters.date}`);
+  if (filters.mobile) filterParts.push(`mobile: ${filters.mobile}`);
+  const filterLabel = document.getElementById('ftFilterLabel');
+  if (filterLabel) {
+    filterLabel.textContent = filterParts.length
+      ? `Showing ${failedCache.length} results for ${filterParts.join(', ')}`
+      : `Showing all ${failedCache.length} failed transfers`;
+  }
+
   renderFailedTable(failedCache);
 }
 
@@ -396,6 +431,12 @@ document.getElementById('ftFilterBtn').addEventListener('click', () => {
     date: document.getElementById('ftDateFilter').value,
     mobile: document.getElementById('ftMobileFilter').value.trim(),
   });
+});
+
+document.getElementById('ftClearBtn').addEventListener('click', () => {
+  document.getElementById('ftDateFilter').value = '';
+  document.getElementById('ftMobileFilter').value = '';
+  loadFailedTransfers();
 });
 
 function showRetryStatus(msg, type) {

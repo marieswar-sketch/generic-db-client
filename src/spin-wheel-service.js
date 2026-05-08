@@ -383,18 +383,38 @@ async function lookupExternalUserId(mobileNumber, queryId) {
   }
 
   if (data.job?.id) {
-    for (let index = 0; index < 10; index += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      const jobCheck = await fetch(`https://analytics.getlokalapp.com/api/jobs/${data.job.id}`, {
-        headers: { Authorization: `Key ${apiKey}` }
-      });
-      const jobData = await jobCheck.json();
+    // poll every 10 seconds, up to 18 times = 3 minute max wait
+    for (let index = 0; index < 18; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      let jobData;
+      try {
+        const jobCheck = await fetch(`https://analytics.getlokalapp.com/api/jobs/${data.job.id}`, {
+          headers: { Authorization: `Key ${apiKey}` },
+          signal: controller.signal
+        });
+        jobData = await jobCheck.json();
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      console.log(`Redash job ${data.job.id} poll ${index + 1}/18 — status: ${jobData.job.status}`);
 
       if (jobData.job.status === 3) {
-        const finalRes = await fetch(`https://analytics.getlokalapp.com/api/query_results/${jobData.job.query_result_id}`, {
-          headers: { Authorization: `Key ${apiKey}` }
-        });
-        const finalData = await finalRes.json();
+        const finalController = new AbortController();
+        const finalTimeout = setTimeout(() => finalController.abort(), 15000);
+        let finalData;
+        try {
+          const finalRes = await fetch(`https://analytics.getlokalapp.com/api/query_results/${jobData.job.query_result_id}`, {
+            headers: { Authorization: `Key ${apiKey}` },
+            signal: finalController.signal
+          });
+          finalData = await finalRes.json();
+        } finally {
+          clearTimeout(finalTimeout);
+        }
         const match = findMatch(finalData.query_result.data.rows);
         return { userId: match?.user_id || null, reason: match ? null : 'not_registered' };
       }
@@ -403,6 +423,7 @@ async function lookupExternalUserId(mobileNumber, queryId) {
         throw new Error(jobData.job.error || 'Redash job failed');
       }
     }
+    throw new Error('Redash job timed out after 3 minutes');
   }
 
   return { userId: null, reason: 'not_registered' };
@@ -425,13 +446,22 @@ async function uploadCoinsToProvider(userId, amount) {
   formData.append('file', blob, 'transfer.csv');
   formData.append('name', 'Spin the wheel');
 
-  const response = await fetch('https://api.dostt.in/payments/free-coins/upload/', {
-    method: 'POST',
-    headers: { 'x-n8n-auth-key': authKey },
-    body: formData
-  });
-
-  const text = await response.text();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  let response, text;
+  try {
+    response = await fetch('https://api.dostt.in/payments/free-coins/upload/', {
+      method: 'POST',
+      headers: { 'x-n8n-auth-key': authKey },
+      body: formData,
+      signal: controller.signal
+    });
+    text = await response.text();
+  } catch (err) {
+    throw new Error(`Dostt API timed out or failed: ${err.message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 
   return {
     ok: response.ok || text.includes('Bulk upload started'),
@@ -639,25 +669,35 @@ export async function getAdminStats() {
     GROUP BY DATE(created_at AT TIME ZONE 'Asia/Kolkata') ORDER BY date
   `);
 
-  // Retention
+  // Retention — "within N days" cumulative (not exact day N)
   const { rows: retentionRows } = await runQuery(`
     SELECT
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d1) / NULLIF(COUNT(*),0), 1) AS day1,
+      COUNT(*)::int AS n_d1,
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d3) / NULLIF(COUNT(*) FILTER (WHERE eligible_d3),0), 1) AS day3,
+      COUNT(*) FILTER (WHERE eligible_d3)::int AS n_d3,
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d7) / NULLIF(COUNT(*) FILTER (WHERE eligible_d7),0), 1) AS day7,
+      COUNT(*) FILTER (WHERE eligible_d7)::int AS n_d7,
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d14) / NULLIF(COUNT(*) FILTER (WHERE eligible_d14),0), 1) AS day14,
-      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d30) / NULLIF(COUNT(*) FILTER (WHERE eligible_d30),0), 1) AS day30
+      COUNT(*) FILTER (WHERE eligible_d14)::int AS n_d14,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d30) / NULLIF(COUNT(*) FILTER (WHERE eligible_d30),0), 1) AS day30,
+      COUNT(*) FILTER (WHERE eligible_d30)::int AS n_d30
     FROM (
       SELECT
         p.id,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 1) AS has_d1,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 3) AS has_d3,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 1) AS has_d1,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 3) AS has_d3,
         p.created_at < NOW() - INTERVAL '3 days' AS eligible_d3,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 7) AS has_d7,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 7) AS has_d7,
         p.created_at < NOW() - INTERVAL '7 days' AS eligible_d7,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 14) AS has_d14,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 14) AS has_d14,
         p.created_at < NOW() - INTERVAL '14 days' AS eligible_d14,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 30) AS has_d30,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 30) AS has_d30,
         p.created_at < NOW() - INTERVAL '30 days' AS eligible_d30
       FROM players p WHERE p.created_at < NOW() - INTERVAL '1 day'
     ) t
@@ -707,9 +747,12 @@ export async function getAdminStats() {
   const transferRate = overview[0].total_players > 0
     ? Math.round((overview[0].players_transferred / overview[0].total_players) * 100)
     : 0;
+  const totalTransferred = Number(overview[0].total_coins_transferred || 0);
+  const absoluteCost = Math.round(totalTransferred * 0.22);
+  const netCost = Math.round(totalTransferred * 0.10);
 
   return {
-    overview: { ...overview[0], pending_coins: Math.max(0, pendingCoins), transfer_rate_pct: transferRate },
+    overview: { ...overview[0], pending_coins: Math.max(0, pendingCoins), transfer_rate_pct: transferRate, absolute_cost: absoluteCost, net_cost: netCost },
     charts: { dailySpins, dailyPlayers, dailyTransfers, rewardsBreakdown, transferStatusBreakdown, dailyActiveUsers, dailyCoinsWon, dailyCoinsTransferred },
     retention: retentionRows[0] || {},
     behaviour: { ...behaviour[0], topPlayers },
