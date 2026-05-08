@@ -217,29 +217,43 @@ async function loadVisual() {
   const rlValues = charts.rewardsBreakdown.map(r => Number(r.count));
   makePieChart('chartRewards', rlLabels, rlValues);
 
-  // Retention bar — show sample size in label, hide bars with n<10 (unreliable)
+  // Retention bar — only show bars with n>=30 (reliable), rest show as 0 with note
+  const MIN_SAMPLE = 30;
   const retData = [
-    { label: `Day 1 (n=${retention.n_d1||0})`, value: Number(retention.day1) || 0, n: retention.n_d1 || 0 },
-    { label: `Day 3 (n=${retention.n_d3||0})`, value: Number(retention.day3) || 0, n: retention.n_d3 || 0 },
-    { label: `Day 7 (n=${retention.n_d7||0})`, value: Number(retention.day7) || 0, n: retention.n_d7 || 0 },
-    { label: `Day 14 (n=${retention.n_d14||0})`, value: Number(retention.day14) || 0, n: retention.n_d14 || 0 },
-    { label: `Day 30 (n=${retention.n_d30||0})`, value: Number(retention.day30) || 0, n: retention.n_d30 || 0 },
+    { label: 'Day 1', value: Number(retention.day1) || 0, n: retention.n_d1 || 0 },
+    { label: 'Day 3', value: Number(retention.day3) || 0, n: retention.n_d3 || 0 },
+    { label: 'Day 7', value: Number(retention.day7) || 0, n: retention.n_d7 || 0 },
+    { label: 'Day 14', value: Number(retention.day14) || 0, n: retention.n_d14 || 0 },
+    { label: 'Day 30', value: Number(retention.day30) || 0, n: retention.n_d30 || 0 },
   ];
-  // grey out bars where sample too small to be meaningful
-  const retColors = retData.map(d => d.n < 10 ? '#475569cc' : CHART_COLORS[3] + 'cc');
-  const ctx = document.getElementById('chartRetention');
-  if (ctx._chart) ctx._chart.destroy();
-  ctx._chart = new Chart(ctx, {
+  const retColors = retData.map(d => d.n >= MIN_SAMPLE ? CHART_COLORS[3] + 'cc' : '#1e293b');
+  const retCtx = document.getElementById('chartRetention');
+  if (retCtx._chart) retCtx._chart.destroy();
+  retCtx._chart = new Chart(retCtx, {
     type: 'bar',
     data: {
-      labels: retData.map(d => d.label),
-      datasets: [{ label: 'Retention % (within N days)', data: retData.map(d => d.value), backgroundColor: retColors, borderRadius: 4 }],
+      labels: retData.map(d => d.n >= MIN_SAMPLE ? `${d.label} (${d.value}%)` : `${d.label}\n(need more data)`),
+      datasets: [{
+        label: 'Retention % (returned within N days)',
+        data: retData.map(d => d.n >= MIN_SAMPLE ? d.value : 0),
+        backgroundColor: retColors,
+        borderRadius: 4
+      }],
     },
     options: {
       responsive: true,
       plugins: {
         legend: { labels: { color: '#e2e8f0' } },
-        tooltip: { callbacks: { afterLabel: (ctx) => retData[ctx.dataIndex].n < 10 ? '⚠️ Small sample — not reliable' : '' } }
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = retData[ctx.dataIndex];
+              return d.n >= MIN_SAMPLE
+                ? `Retention: ${d.value}% (${d.n} players)`
+                : `Not enough data yet (n=${d.n}, need ${MIN_SAMPLE}+)`;
+            }
+          }
+        }
       },
       scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' }, beginAtZero: true, max: 100 } }
     },
