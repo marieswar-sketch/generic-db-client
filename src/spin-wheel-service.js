@@ -796,6 +796,7 @@ export async function getAdminTableData(type, filters = {}) {
       SELECT tr.id, p.mobile_number, p.display_name, tr.coins_requested, tr.status,
              tr.error_message, tr.notes, tr.provider_ref,
              tr.created_at AT TIME ZONE 'Asia/Kolkata' AS created_at,
+             TO_CHAR(tr.created_at AT TIME ZONE 'Asia/Kolkata', 'DD/MM/YYYY') AS transfer_date,
              (p.total_coins - COALESCE((SELECT SUM(tr2.coins_requested) FROM transfer_requests tr2 WHERE tr2.player_id=p.id AND tr2.status IN ('submitted','success','mock_success')),0))::int AS wallet_balance
       FROM transfer_requests tr
       JOIN players p ON p.id = tr.player_id
