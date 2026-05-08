@@ -669,25 +669,35 @@ export async function getAdminStats() {
     GROUP BY DATE(created_at AT TIME ZONE 'Asia/Kolkata') ORDER BY date
   `);
 
-  // Retention
+  // Retention — "within N days" cumulative (not exact day N)
   const { rows: retentionRows } = await runQuery(`
     SELECT
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d1) / NULLIF(COUNT(*),0), 1) AS day1,
+      COUNT(*)::int AS n_d1,
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d3) / NULLIF(COUNT(*) FILTER (WHERE eligible_d3),0), 1) AS day3,
+      COUNT(*) FILTER (WHERE eligible_d3)::int AS n_d3,
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d7) / NULLIF(COUNT(*) FILTER (WHERE eligible_d7),0), 1) AS day7,
+      COUNT(*) FILTER (WHERE eligible_d7)::int AS n_d7,
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d14) / NULLIF(COUNT(*) FILTER (WHERE eligible_d14),0), 1) AS day14,
-      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d30) / NULLIF(COUNT(*) FILTER (WHERE eligible_d30),0), 1) AS day30
+      COUNT(*) FILTER (WHERE eligible_d14)::int AS n_d14,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d30) / NULLIF(COUNT(*) FILTER (WHERE eligible_d30),0), 1) AS day30,
+      COUNT(*) FILTER (WHERE eligible_d30)::int AS n_d30
     FROM (
       SELECT
         p.id,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 1) AS has_d1,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 3) AS has_d3,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 1) AS has_d1,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 3) AS has_d3,
         p.created_at < NOW() - INTERVAL '3 days' AS eligible_d3,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 7) AS has_d7,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 7) AS has_d7,
         p.created_at < NOW() - INTERVAL '7 days' AS eligible_d7,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 14) AS has_d14,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 14) AS has_d14,
         p.created_at < NOW() - INTERVAL '14 days' AS eligible_d14,
-        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id AND se.spin_date = p.created_at::date + 30) AS has_d30,
+        EXISTS(SELECT 1 FROM spin_events se WHERE se.player_id=p.id
+               AND se.spin_date BETWEEN p.created_at::date + 1 AND p.created_at::date + 30) AS has_d30,
         p.created_at < NOW() - INTERVAL '30 days' AS eligible_d30
       FROM players p WHERE p.created_at < NOW() - INTERVAL '1 day'
     ) t
@@ -737,9 +747,12 @@ export async function getAdminStats() {
   const transferRate = overview[0].total_players > 0
     ? Math.round((overview[0].players_transferred / overview[0].total_players) * 100)
     : 0;
+  const totalTransferred = Number(overview[0].total_coins_transferred || 0);
+  const absoluteCost = Math.round(totalTransferred * 0.22);
+  const netCost = Math.round(totalTransferred * 0.10);
 
   return {
-    overview: { ...overview[0], pending_coins: Math.max(0, pendingCoins), transfer_rate_pct: transferRate },
+    overview: { ...overview[0], pending_coins: Math.max(0, pendingCoins), transfer_rate_pct: transferRate, absolute_cost: absoluteCost, net_cost: netCost },
     charts: { dailySpins, dailyPlayers, dailyTransfers, rewardsBreakdown, transferStatusBreakdown, dailyActiveUsers, dailyCoinsWon, dailyCoinsTransferred },
     retention: retentionRows[0] || {},
     behaviour: { ...behaviour[0], topPlayers },
