@@ -303,7 +303,7 @@ async function loadDataTab() {
   dataCache = { players, spins, transfers };
   renderTable('playersTable', players, ['id','mobile_number','display_name','total_coins','transferred_coins','wallet_balance','total_spins','created_at']);
   renderTable('spinsTable', spins, ['id','mobile_number','display_name','reward_key','coin_value','spin_date','created_at']);
-  renderTable('transfersTable', transfers, ['id','mobile_number','display_name','coins_requested','status','error_message','wallet_balance','created_at']);
+  renderTable('transfersTable', transfers, ['id','mobile_number','display_name','coins_requested','status','error_message','wallet_balance','transfer_date']);
 }
 
 function renderTable(tableId, rows, keys) {
@@ -329,7 +329,7 @@ document.getElementById('filterTransfersBtn').addEventListener('click', async ()
   if (status) params.set('status', status);
   const transfers = await API.get(`/api/admin/data/transfers?${params}`);
   dataCache.transfers = transfers;
-  renderTable('transfersTable', transfers, ['id','mobile_number','display_name','coins_requested','status','error_message','wallet_balance','created_at']);
+  renderTable('transfersTable', transfers, ['id','mobile_number','display_name','coins_requested','status','error_message','wallet_balance','transfer_date']);
 });
 
 // CSV download buttons
@@ -387,7 +387,7 @@ function renderFailedTable(rows) {
       <td><span class="status-badge status-${row.status}">${row.status}</span></td>
       <td class="error-cell">${row.error_message || '—'}</td>
       <td><strong>${row.wallet_balance}</strong></td>
-      <td>${row.created_at ? new Date(row.created_at).toLocaleDateString('en-IN') : '—'}</td>
+      <td>${row.transfer_date || '—'}</td>
       <td>
         <button class="retry-btn" data-id="${row.id}" ${row.wallet_balance <= 0 ? 'disabled title="No balance"' : ''}>
           Retry
@@ -429,16 +429,31 @@ document.getElementById('retryAllBtn').addEventListener('click', async () => {
   setLoading(true);
   try {
     const { results } = await API.post('/api/admin/retry-all', { mobile: mobile || null });
-    const success = results.filter(r => r.success).length;
-    const fail = results.length - success;
-    showRetryStatus(`✅ Retry All done — ${success} succeeded, ${fail} failed`, success > 0 ? 'success' : 'error');
-    await loadFailedTransfers();
+    const succeeded = results.filter(r => r.success);
+    const failed = results.filter(r => !r.success);
+    showRetryAllSummary(succeeded, failed);
+    await loadFailedTransfers({ mobile });
   } catch (err) {
     showRetryStatus(`❌ Error: ${err.message}`, 'error');
   } finally {
     setLoading(false);
   }
 });
+
+function showRetryAllSummary(succeeded, failed) {
+  const el = document.getElementById('retryStatus');
+  const total = succeeded.length + failed.length;
+  const reasons = {};
+  failed.forEach(r => { reasons[r.reason || 'unknown'] = (reasons[r.reason || 'unknown'] || 0) + 1; });
+  const reasonText = Object.entries(reasons).map(([k, v]) => `${v} × ${k}`).join(', ');
+  el.innerHTML = `
+    <strong>Retry All complete — ${total} processed</strong><br>
+    ✅ ${succeeded.length} succeeded &nbsp;|&nbsp; ❌ ${failed.length} failed${reasonText ? ` (${reasonText})` : ''}
+    ${succeeded.length ? `<br><span style="color:#94a3b8;font-size:0.8rem">Coins sent: ${succeeded.map(r => r.coins).join(', ')}</span>` : ''}
+  `;
+  el.className = 'retry-status ' + (succeeded.length > 0 ? 'success' : 'error');
+  el.classList.remove('hidden');
+}
 
 document.getElementById('ftFilterBtn').addEventListener('click', () => {
   loadFailedTransfers({
