@@ -932,3 +932,34 @@ export async function resetTestData(mobileNumber) {
     return { status: 'success', message: 'Test player reset complete' };
   });
 }
+
+export async function getCohortRetention(date) {
+  const { rows } = await runQuery(`
+    WITH cohort AS (
+      SELECT p.id
+      FROM players p
+      WHERE DATE(p.created_at AT TIME ZONE 'Asia/Kolkata') = $1::date
+    ),
+    player_days AS (
+      SELECT c.id AS player_id,
+             (se.spin_date - $1::date)::int AS day_num
+      FROM cohort c
+      JOIN spin_events se ON se.player_id = c.id
+      WHERE se.spin_date > $1::date
+      GROUP BY c.id, se.spin_date
+    )
+    SELECT
+      COUNT(DISTINCT c.id)::int AS cohort_size,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num = 1 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d1,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num = 2 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d2,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num = 3 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d3,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num = 4 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d4,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num = 5 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d5,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num = 6 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d6,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num >= 7 AND pd.day_num < 30 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d7plus,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN pd.day_num >= 30 THEN pd.player_id END) / NULLIF(COUNT(DISTINCT c.id),0), 1) AS d30plus
+    FROM cohort c
+    LEFT JOIN player_days pd ON pd.player_id = c.id
+  `, [date]);
+  return rows[0] || { cohort_size: 0 };
+}

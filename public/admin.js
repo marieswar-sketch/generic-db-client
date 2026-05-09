@@ -440,6 +440,66 @@ document.getElementById('retryAllBtn').addEventListener('click', async () => {
   }
 });
 
+// ── Cohort Retention ──────────────────────────────────────────────────────────
+document.getElementById('cohortLoadBtn').addEventListener('click', () => {
+  const date = document.getElementById('cohortDatePicker').value;
+  if (!date) return alert('Please pick a date first');
+  loadCohortRetention(date);
+});
+
+async function loadCohortRetention(date) {
+  const label = document.getElementById('cohortLabel');
+  label.textContent = 'Loading...';
+  try {
+    const data = await API.get(`/api/admin/cohort-retention?date=${date}`);
+    const n = data.cohort_size || 0;
+    label.textContent = `${n} players registered on ${date}`;
+
+    const bars = [
+      { label: 'D1', value: Number(data.d1) || 0 },
+      { label: 'D2', value: Number(data.d2) || 0 },
+      { label: 'D3', value: Number(data.d3) || 0 },
+      { label: 'D4', value: Number(data.d4) || 0 },
+      { label: 'D5', value: Number(data.d5) || 0 },
+      { label: 'D6', value: Number(data.d6) || 0 },
+      { label: 'D7+', value: Number(data.d7plus) || 0 },
+      { label: 'D30+', value: Number(data.d30plus) || 0 },
+    ];
+
+    const ctx = document.getElementById('chartCohort');
+    if (ctx._chart) ctx._chart.destroy();
+    ctx._chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: bars.map(b => b.label),
+        datasets: [{
+          label: `Retention % — cohort of ${n} players (${date})`,
+          data: bars.map(b => b.value),
+          backgroundColor: bars.map((b, i) => CHART_COLORS[i % CHART_COLORS.length] + 'cc'),
+          borderRadius: 6,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { labels: { color: '#e2e8f0' } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.parsed.y}% of ${n} players (${Math.round(ctx.parsed.y * n / 100)} users)`,
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { color: '#94a3b8' } },
+          y: { ticks: { color: '#94a3b8', callback: v => v + '%' }, beginAtZero: true, max: 100 }
+        }
+      },
+    });
+  } catch (err) {
+    label.textContent = `Error: ${err.message}`;
+  }
+}
+
 function showRetryAllSummary(succeeded, failed) {
   const el = document.getElementById('retryStatus');
   const total = succeeded.length + failed.length;

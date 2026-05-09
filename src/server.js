@@ -7,6 +7,7 @@ import {
   dismissNotification,
   getAdminStats,
   getAdminTableData,
+  getCohortRetention,
   getPlayerState,
   getPublicConfig,
   registerPlayer,
@@ -173,6 +174,15 @@ app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
   try {
     const stats = await getAdminStats();
     res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/cohort-retention', requireAdmin, async (req, res) => {
+  try {
+    const data = await getCohortRetention(req.query.date);
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

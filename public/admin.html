@@ -60,6 +60,15 @@
       <div class="section-title">Retention</div>
       <div class="chart-card chart-full"><canvas id="chartRetention"></canvas></div>
 
+      <div class="section-title">Cohort Retention — by Registration Date</div>
+      <div class="cohort-controls">
+        <label>Pick a registration date:</label>
+        <input type="date" id="cohortDatePicker">
+        <button class="filter-btn" id="cohortLoadBtn">Load</button>
+        <span id="cohortLabel" class="filter-label"></span>
+      </div>
+      <div class="chart-card chart-full"><canvas id="chartCohort"></canvas></div>
+
       <div class="section-title">Player Behaviour</div>
       <div id="behaviourCards" class="cards-grid"></div>
 
