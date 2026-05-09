@@ -323,6 +323,23 @@ body {
 .retry-status.success { background: #052e1666; color: #34d399; border: 1px solid #34d39944; }
 .retry-status.error { background: #450a0a66; color: #f87171; border: 1px solid #f8717144; }
 
+.cohort-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.cohort-controls label { color: #94a3b8; font-size: 0.9rem; }
+.cohort-controls input[type=date] {
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
 .filter-label {
   font-size: 0.82rem;
   color: #94a3b8;
