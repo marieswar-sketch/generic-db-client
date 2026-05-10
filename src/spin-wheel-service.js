@@ -674,13 +674,13 @@ export async function getAdminStats() {
     SELECT
       ROUND(100.0 * COUNT(*) FILTER (WHERE has_d1) / NULLIF(COUNT(*),0), 1) AS day1,
       COUNT(*)::int AS n_d1,
-      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d3) / NULLIF(COUNT(*) FILTER (WHERE eligible_d3),0), 1) AS day3,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d3 AND eligible_d3) / NULLIF(COUNT(*) FILTER (WHERE eligible_d3),0), 1) AS day3,
       COUNT(*) FILTER (WHERE eligible_d3)::int AS n_d3,
-      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d7) / NULLIF(COUNT(*) FILTER (WHERE eligible_d7),0), 1) AS day7,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d7 AND eligible_d7) / NULLIF(COUNT(*) FILTER (WHERE eligible_d7),0), 1) AS day7,
       COUNT(*) FILTER (WHERE eligible_d7)::int AS n_d7,
-      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d14) / NULLIF(COUNT(*) FILTER (WHERE eligible_d14),0), 1) AS day14,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d14 AND eligible_d14) / NULLIF(COUNT(*) FILTER (WHERE eligible_d14),0), 1) AS day14,
       COUNT(*) FILTER (WHERE eligible_d14)::int AS n_d14,
-      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d30) / NULLIF(COUNT(*) FILTER (WHERE eligible_d30),0), 1) AS day30,
+      ROUND(100.0 * COUNT(*) FILTER (WHERE has_d30 AND eligible_d30) / NULLIF(COUNT(*) FILTER (WHERE eligible_d30),0), 1) AS day30,
       COUNT(*) FILTER (WHERE eligible_d30)::int AS n_d30
     FROM (
       SELECT
