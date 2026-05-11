@@ -1,10 +1,43 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+:root {
+  --bg:        #0f172a;
+  --surface:   #1e293b;
+  --border:    #334155;
+  --text:      #e2e8f0;
+  --text-muted:#94a3b8;
+  --text-dim:  #64748b;
+  --text-faint:#475569;
+  --input-bg:  #0f172a;
+  --thead-bg:  #0f172a;
+  --row-hover: #1e293b;
+  --td-border: #1e293b;
+  --td-color:  #cbd5e1;
+  --h3-color:  #cbd5e1;
+}
+
+body.light {
+  --bg:        #f1f5f9;
+  --surface:   #ffffff;
+  --border:    #cbd5e1;
+  --text:      #0f172a;
+  --text-muted:#475569;
+  --text-dim:  #64748b;
+  --text-faint:#94a3b8;
+  --input-bg:  #f8fafc;
+  --thead-bg:  #f1f5f9;
+  --row-hover: #f8fafc;
+  --td-border: #e2e8f0;
+  --td-color:  #334155;
+  --h3-color:  #1e293b;
+}
+
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--bg);
+  color: var(--text);
   min-height: 100vh;
+  transition: background 0.2s, color 0.2s;
 }
 
 .hidden { display: none !important; }
@@ -19,8 +52,8 @@ body {
 }
 
 .login-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 40px 36px;
   width: 100%;
@@ -41,16 +74,16 @@ body {
 .login-card h2 {
   text-align: center;
   font-size: 1.25rem;
-  color: #cbd5e1;
+  color: var(--text-muted);
   font-weight: 600;
 }
 
 .login-card input {
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
-  color: #e2e8f0;
+  color: var(--text);
   font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s;
@@ -74,8 +107,8 @@ body {
 
 /* ── Header ────────────────────────────────────────────────────────────── */
 .admin-header {
-  background: #1e293b;
-  border-bottom: 1px solid #334155;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   padding: 12px 24px;
   display: flex;
   align-items: center;
@@ -87,12 +120,14 @@ body {
 
 .header-left { display: flex; align-items: center; gap: 12px; }
 .header-logo { height: 28px; object-fit: contain; }
-.header-title { font-size: 1rem; font-weight: 600; color: #94a3b8; }
+.header-title { font-size: 1rem; font-weight: 600; color: var(--text-muted); }
+
+.header-right { display: flex; align-items: center; gap: 10px; }
 
 .logout-btn {
   background: transparent;
-  border: 1px solid #475569;
-  color: #94a3b8;
+  border: 1px solid var(--text-faint);
+  color: var(--text-muted);
   padding: 6px 14px;
   border-radius: 6px;
   cursor: pointer;
@@ -101,10 +136,23 @@ body {
 }
 .logout-btn:hover { border-color: #f87171; color: #f87171; }
 
+.theme-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.theme-btn:hover { border-color: #6366f1; color: #6366f1; }
+
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
 .tab-nav {
-  background: #1e293b;
-  border-bottom: 1px solid #334155;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   padding: 0 24px;
   display: flex;
   gap: 4px;
@@ -114,14 +162,14 @@ body {
   background: transparent;
   border: none;
   border-bottom: 3px solid transparent;
-  color: #64748b;
+  color: var(--text-dim);
   padding: 14px 18px;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
-.tab-btn:hover { color: #cbd5e1; }
+.tab-btn:hover { color: var(--text); }
 .tab-btn.active { color: #6366f1; border-bottom-color: #6366f1; }
 
 /* ── Tab Panes ─────────────────────────────────────────────────────────── */
@@ -133,7 +181,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #64748b;
+  color: var(--text-dim);
   margin: 32px 0 14px;
 }
 
@@ -145,15 +193,15 @@ body {
 }
 
 .stat-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 18px 16px;
 }
 
-.stat-label { font-size: 0.78rem; color: #64748b; font-weight: 500; margin-bottom: 6px; }
+.stat-label { font-size: 0.78rem; color: var(--text-dim); font-weight: 500; margin-bottom: 6px; }
 .stat-value { font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
-.stat-sub { font-size: 0.74rem; color: #475569; }
+.stat-sub { font-size: 0.74rem; color: var(--text-faint); }
 
 /* ── Charts ────────────────────────────────────────────────────────────── */
 .charts-grid {
@@ -164,8 +212,8 @@ body {
 .charts-grid-2 { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 
 .chart-card {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
 }
@@ -175,7 +223,7 @@ body {
 .table-wrap {
   overflow-x: auto;
   border-radius: 10px;
-  border: 1px solid #334155;
+  border: 1px solid var(--border);
 }
 
 .data-table {
@@ -185,14 +233,14 @@ body {
 }
 
 .data-table thead tr {
-  background: #0f172a;
-  border-bottom: 1px solid #334155;
+  background: var(--thead-bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .data-table th {
   padding: 10px 14px;
   text-align: left;
-  color: #64748b;
+  color: var(--text-dim);
   font-weight: 600;
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -202,16 +250,16 @@ body {
 
 .data-table td {
   padding: 10px 14px;
-  border-bottom: 1px solid #1e293b;
-  color: #cbd5e1;
+  border-bottom: 1px solid var(--td-border);
+  color: var(--td-color);
   white-space: nowrap;
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.data-table tbody tr:hover { background: #1e293b; }
-.empty-row { text-align: center; color: #475569; padding: 32px !important; }
+.data-table tbody tr:hover { background: var(--row-hover); }
+.empty-row { text-align: center; color: var(--text-faint); padding: 32px !important; }
 
 /* ── Data Section ──────────────────────────────────────────────────────── */
 .data-section { margin-bottom: 36px; }
@@ -228,7 +276,7 @@ body {
 .data-section-header h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #cbd5e1;
+  color: var(--h3-color);
 }
 
 .filter-row {
@@ -239,27 +287,27 @@ body {
 }
 
 .filter-row input, .filter-row select {
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 7px 10px;
-  color: #e2e8f0;
+  color: var(--text);
   font-size: 0.83rem;
   outline: none;
 }
 .filter-row input:focus, .filter-row select:focus { border-color: #6366f1; }
 
 .filter-btn {
-  background: #334155;
+  background: var(--border);
   border: none;
   border-radius: 6px;
   padding: 7px 14px;
-  color: #e2e8f0;
+  color: var(--text);
   font-size: 0.83rem;
   cursor: pointer;
   transition: background 0.2s;
 }
-.filter-btn:hover { background: #475569; }
+.filter-btn:hover { background: var(--text-faint); }
 
 .dl-btn {
   background: #1e3a5f;
@@ -311,7 +359,7 @@ body {
 .status-submitted { background: #1e3a5f44; color: #60a5fa; border: 1px solid #60a5fa33; }
 .status-failed_provider, .status-failed_not_registered { background: #450a0a44; color: #f87171; border: 1px solid #f8717133; }
 
-.error-cell { max-width: 240px; white-space: normal; font-size: 0.78rem; color: #94a3b8; }
+.error-cell { max-width: 240px; white-space: normal; font-size: 0.78rem; color: var(--text-muted); }
 
 .retry-status {
   padding: 12px 16px;
@@ -330,11 +378,11 @@ body {
   margin-bottom: 12px;
   flex-wrap: wrap;
 }
-.cohort-controls label { color: #94a3b8; font-size: 0.9rem; }
+.cohort-controls label { color: var(--text-muted); font-size: 0.9rem; }
 .cohort-controls input[type=date] {
-  background: #1e293b;
-  border: 1px solid #334155;
-  color: #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 0.9rem;
@@ -346,7 +394,7 @@ body {
 
 .filter-label {
   font-size: 0.82rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   padding: 6px 2px 10px;
 }
 
@@ -365,7 +413,7 @@ body {
 
 .loading-spinner {
   width: 40px; height: 40px;
-  border: 3px solid #334155;
+  border: 3px solid var(--border);
   border-top-color: #6366f1;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
