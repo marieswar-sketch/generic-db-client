@@ -34,7 +34,9 @@ body.light {
 
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #0f172a;
   background: var(--bg);
+  color: #e2e8f0;
   color: var(--text);
   min-height: 100vh;
   transition: background 0.2s, color 0.2s;

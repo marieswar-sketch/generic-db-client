@@ -25,22 +25,13 @@ const API = {
 };
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
-(function initTheme() {
-  if (localStorage.getItem('admin_theme') === 'light') {
-    document.body.classList.add('light');
-  }
-})();
+// Always start dark on page load — light is only active while toggled in this session
+localStorage.removeItem('admin_theme');
 
 document.getElementById('themeBtn').addEventListener('click', () => {
   const isLight = document.body.classList.toggle('light');
-  localStorage.setItem('admin_theme', isLight ? 'light' : 'dark');
   document.getElementById('themeBtn').textContent = isLight ? '🌙 Dark' : '☀️ Light';
 });
-
-// set correct label on load
-if (document.body.classList.contains('light')) {
-  document.getElementById('themeBtn').textContent = '🌙 Dark';
-}
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 document.getElementById('loginBtn').addEventListener('click', async () => {
@@ -119,13 +110,12 @@ function downloadCSV(data, filename) {
 }
 
 // ── DDR helper ────────────────────────────────────────────────────────────────
-function ddrTag(today, yesterday, label = 'yesterday') {
-  if (!yesterday) return { text: `→ No data ${label}`, cls: 'ddr-flat' };
+function ddrTag(today, yesterday) {
+  if (!yesterday) return { text: '→ No data yesterday', cls: 'ddr-flat' };
   const pct = Math.round(((today - yesterday) / yesterday) * 100);
-  const yestStr = `${Number(yesterday).toLocaleString()} (${label})`;
-  if (pct > 0) return { text: `↑ +${pct}% vs ${yestStr}`, cls: 'ddr-up' };
-  if (pct < 0) return { text: `↓ ${pct}% vs ${yestStr}`, cls: 'ddr-down' };
-  return { text: `→ Same as ${label} (${Number(yesterday).toLocaleString()})`, cls: 'ddr-flat' };
+  if (pct > 0) return { text: `↑ +${pct}% vs ${Number(yesterday).toLocaleString()} yesterday`, cls: 'ddr-up' };
+  if (pct < 0) return { text: `↓ ${pct}% vs ${Number(yesterday).toLocaleString()} yesterday`, cls: 'ddr-down' };
+  return { text: `→ Same as yesterday (${Number(yesterday).toLocaleString()})`, cls: 'ddr-flat' };
 }
 
 // ── Chart helpers ─────────────────────────────────────────────────────────────
@@ -192,10 +182,7 @@ function makeStackedBarChart(canvasId, labels, datasets) {
 let cachedStats = null;
 
 async function loadVisual() {
-  const [stats, ddr] = await Promise.all([
-    API.get('/api/admin/stats'),
-    API.get('/api/admin/ddr').catch(() => null),
-  ]);
+  const stats = await API.get('/api/admin/stats');
   cachedStats = stats;
 
   // Overview cards
@@ -244,21 +231,10 @@ async function loadVisual() {
   }
   const tDates = fillDates([], 'date', 'count');
 
-  // DDR cards — today vs same time yesterday if endpoint available, else vs yesterday full day
+  // DDR cards — today vs yesterday (using daily chart data, no extra endpoint needed)
   const todayLabel = tDates.at(-1).label;
   const yestLabel  = tDates.at(-2).label;
-  const ddrMetrics = ddr ? [
-    { label: 'Spins Today',             today: Number(ddr.spins_today),         yest: Number(ddr.spins_yest_sametime),       color: CHART_COLORS[0] },
-    { label: 'New Players Today',       today: Number(ddr.new_players_today),   yest: Number(ddr.new_players_yest_sametime), color: CHART_COLORS[1] },
-    { label: 'Active Users Today',      today: Number(ddr.dau_today),           yest: Number(ddr.dau_yest_sametime),         color: CHART_COLORS[2] },
-    { label: 'Coins Won Today',         today: Number(ddr.coins_today),         yest: Number(ddr.coins_yest_sametime),       color: CHART_COLORS[5] },
-    { label: 'Coins Transferred Today', today: Number(ddr.xfer_coins_today),    yest: Number(ddr.xfer_coins_yest_sametime),  color: CHART_COLORS[3] },
-    { label: 'Transfers Today',
-      today: Number(ddr.xfer_count_today),
-      yest:  Number(ddr.xfer_count_yest_sametime),
-      sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
-      color: '#38bdf8' },
-  ] : [
+  const ddrMetrics = [
     { label: 'Spins Today',             today: filledSpins.at(-1).value,      yest: filledSpins.at(-2).value,      color: CHART_COLORS[0] },
     { label: 'New Players Today',       today: filledPlayers.at(-1).value,    yest: filledPlayers.at(-2).value,    color: CHART_COLORS[1] },
     { label: 'Active Users Today',      today: filledDAU.at(-1).value,        yest: filledDAU.at(-2).value,        color: CHART_COLORS[2] },
@@ -270,10 +246,9 @@ async function loadVisual() {
       sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
       color: '#38bdf8' },
   ];
-  const ddrLabel = ddr ? 'same time yesterday' : 'yesterday';
   document.getElementById('overviewCards').insertAdjacentHTML('beforeend',
     ddrMetrics.map(m => {
-      const d = ddrTag(m.today, m.yest, ddrLabel);
+      const d = ddrTag(m.today, m.yest);
       return `
         <div class="stat-card" style="border-top:3px solid ${m.color}">
           <p class="stat-label">${m.label}</p>
