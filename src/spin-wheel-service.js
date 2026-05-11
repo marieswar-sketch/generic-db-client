@@ -964,6 +964,75 @@ export async function getCohortRetention(date) {
   return rows[0] || { cohort_size: 0 };
 }
 
+export async function getDDRTimeSeries() {
+  // For each of the last 7 days, count only up to the same elapsed time as NOW
+  // e.g. if it's 3 PM, every bar shows midnight → 3 PM for that day
+  const { rows: spinRows } = await runQuery(`
+    WITH
+      now_ist AS (SELECT NOW() AT TIME ZONE 'Asia/Kolkata' AS t),
+      elapsed  AS (SELECT t - DATE_TRUNC('day', t) AS e FROM now_ist)
+    SELECT
+      (DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day'))::date::text AS date,
+      COUNT(se.id)::int                      AS spins,
+      COALESCE(SUM(se.coin_value), 0)::int   AS coins_won,
+      COUNT(DISTINCT se.player_id)::int      AS active_users
+    FROM generate_series(6, 0, -1) AS gs(n)
+    CROSS JOIN now_ist, elapsed
+    LEFT JOIN spin_events se ON (
+      (se.created_at AT TIME ZONE 'Asia/Kolkata') >= DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day')
+      AND (se.created_at AT TIME ZONE 'Asia/Kolkata') <  DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day') + elapsed.e
+    )
+    GROUP BY gs.n, DATE_TRUNC('day', now_ist.t)
+    ORDER BY gs.n DESC
+  `);
+
+  const { rows: playerRows } = await runQuery(`
+    WITH
+      now_ist AS (SELECT NOW() AT TIME ZONE 'Asia/Kolkata' AS t),
+      elapsed  AS (SELECT t - DATE_TRUNC('day', t) AS e FROM now_ist)
+    SELECT
+      (DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day'))::date::text AS date,
+      COUNT(p.id)::int AS new_players
+    FROM generate_series(6, 0, -1) AS gs(n)
+    CROSS JOIN now_ist, elapsed
+    LEFT JOIN players p ON (
+      (p.created_at AT TIME ZONE 'Asia/Kolkata') >= DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day')
+      AND (p.created_at AT TIME ZONE 'Asia/Kolkata') <  DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day') + elapsed.e
+    )
+    GROUP BY gs.n, DATE_TRUNC('day', now_ist.t)
+    ORDER BY gs.n DESC
+  `);
+
+  const { rows: xferRows } = await runQuery(`
+    WITH
+      now_ist AS (SELECT NOW() AT TIME ZONE 'Asia/Kolkata' AS t),
+      elapsed  AS (SELECT t - DATE_TRUNC('day', t) AS e FROM now_ist)
+    SELECT
+      (DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day'))::date::text AS date,
+      COALESCE(SUM(tr.coins_requested), 0)::int AS coins_transferred,
+      COUNT(tr.id)::int                          AS transfers_success
+    FROM generate_series(6, 0, -1) AS gs(n)
+    CROSS JOIN now_ist, elapsed
+    LEFT JOIN transfer_requests tr ON (
+      tr.status = ANY($1)
+      AND (tr.created_at AT TIME ZONE 'Asia/Kolkata') >= DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day')
+      AND (tr.created_at AT TIME ZONE 'Asia/Kolkata') <  DATE_TRUNC('day', now_ist.t) - (gs.n * INTERVAL '1 day') + elapsed.e
+    )
+    GROUP BY gs.n, DATE_TRUNC('day', now_ist.t)
+    ORDER BY gs.n DESC
+  `, [COUNTED_TRANSFER_STATUSES]);
+
+  return spinRows.map((row, i) => ({
+    date:               row.date,
+    spins:              row.spins,
+    coins_won:          row.coins_won,
+    active_users:       row.active_users,
+    new_players:        playerRows[i]?.new_players    || 0,
+    coins_transferred:  xferRows[i]?.coins_transferred || 0,
+    transfers_success:  xferRows[i]?.transfers_success || 0,
+  }));
+}
+
 export async function getDDRStats() {
   const { rows: spinRows } = await runQuery(`
     WITH
