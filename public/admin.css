@@ -340,6 +340,10 @@ body {
   font-size: 0.9rem;
 }
 
+.ddr-up   { color: #10b981; }
+.ddr-down { color: #f43f5e; }
+.ddr-flat { color: #94a3b8; }
+
 .filter-label {
   font-size: 0.82rem;
   color: #94a3b8;

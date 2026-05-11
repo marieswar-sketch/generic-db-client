@@ -383,8 +383,8 @@ async function lookupExternalUserId(mobileNumber, queryId) {
   }
 
   if (data.job?.id) {
-    // poll every 10 seconds, up to 18 times = 3 minute max wait
-    for (let index = 0; index < 18; index += 1) {
+    // poll every 10 seconds, up to 5 times = 50 second max wait (fits within proxy timeout)
+    for (let index = 0; index < 5; index += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10000));
 
       const controller = new AbortController();
@@ -423,7 +423,7 @@ async function lookupExternalUserId(mobileNumber, queryId) {
         throw new Error(jobData.job.error || 'Redash job failed');
       }
     }
-    throw new Error('Redash job timed out after 3 minutes');
+    throw new Error('Redash lookup timed out after 50 seconds — user may not be registered');
   }
 
   return { userId: null, reason: 'not_registered' };

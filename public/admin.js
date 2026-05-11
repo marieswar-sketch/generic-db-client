@@ -10,13 +10,17 @@ const API = {
   },
   async get(path) {
     const res = await fetch(path, { headers: this.headers() });
-    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-    return res.json();
+    let data;
+    try { data = await res.json(); } catch { throw new Error(`Server error ${res.status} — possibly timed out. Try again.`); }
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
   },
   async post(path, body = {}) {
     const res = await fetch(path, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) });
-    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-    return res.json();
+    let data;
+    try { data = await res.json(); } catch { throw new Error(`Server error ${res.status} — possibly timed out. Try again.`); }
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
   },
 };
 
@@ -94,6 +98,15 @@ function downloadCSV(data, filename) {
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── DDR helper ────────────────────────────────────────────────────────────────
+function ddrTag(today, yesterday) {
+  if (!yesterday) return { text: '→ No data yesterday', cls: 'ddr-flat' };
+  const pct = Math.round(((today - yesterday) / yesterday) * 100);
+  if (pct > 0) return { text: `↑ +${pct}% vs ${Number(yesterday).toLocaleString()}`, cls: 'ddr-up' };
+  if (pct < 0) return { text: `↓ ${pct}% vs ${Number(yesterday).toLocaleString()}`, cls: 'ddr-down' };
+  return { text: `→ Same as yesterday (${Number(yesterday).toLocaleString()})`, cls: 'ddr-flat' };
 }
 
 // ── Chart helpers ─────────────────────────────────────────────────────────────
@@ -188,11 +201,17 @@ async function loadVisual() {
   // Charts
   const { charts, retention, behaviour } = stats;
 
-  makeLineChart('chartSpins', 'Spins per Day', fillDates(charts.dailySpins, 'date', 'count'), CHART_COLORS[0]);
-  makeBarChart('chartPlayers', 'New Players per Day', fillDates(charts.dailyPlayers, 'date', 'count'), CHART_COLORS[1]);
-  makeLineChart('chartDAU', 'Daily Active Users', fillDates(charts.dailyActiveUsers, 'date', 'count'), CHART_COLORS[2]);
-  makeLineChart('chartCoinsWon', 'Coins Won per Day', fillDates(charts.dailyCoinsWon, 'date', 'count'), CHART_COLORS[5]);
-  makeBarChart('chartCoinsTransferred', 'Coins Transferred per Day', fillDates(charts.dailyCoinsTransferred, 'date', 'count'), CHART_COLORS[3]);
+  const filledSpins      = fillDates(charts.dailySpins, 'date', 'count');
+  const filledPlayers    = fillDates(charts.dailyPlayers, 'date', 'count');
+  const filledDAU        = fillDates(charts.dailyActiveUsers, 'date', 'count');
+  const filledCoinsWon   = fillDates(charts.dailyCoinsWon, 'date', 'count');
+  const filledCoinsXfer  = fillDates(charts.dailyCoinsTransferred, 'date', 'count');
+
+  makeLineChart('chartSpins', 'Spins per Day', filledSpins, CHART_COLORS[0]);
+  makeBarChart('chartPlayers', 'New Players per Day', filledPlayers, CHART_COLORS[1]);
+  makeLineChart('chartDAU', 'Daily Active Users', filledDAU, CHART_COLORS[2]);
+  makeLineChart('chartCoinsWon', 'Coins Won per Day', filledCoinsWon, CHART_COLORS[5]);
+  makeBarChart('chartCoinsTransferred', 'Coins Transferred per Day', filledCoinsXfer, CHART_COLORS[3]);
 
   // Stacked bar: transfers success vs failed
   const dateMap = {};
@@ -202,6 +221,34 @@ async function loadVisual() {
     else dateMap[row.date].failed += Number(row.count);
   }
   const tDates = fillDates([], 'date', 'count');
+
+  // DDR cards — today vs yesterday for each metric
+  const todayLabel = tDates.at(-1).label;
+  const yestLabel  = tDates.at(-2).label;
+  const ddrMetrics = [
+    { label: 'Spins Today',           today: filledSpins.at(-1).value,     yest: filledSpins.at(-2).value,     color: CHART_COLORS[0] },
+    { label: 'New Players Today',     today: filledPlayers.at(-1).value,   yest: filledPlayers.at(-2).value,   color: CHART_COLORS[1] },
+    { label: 'Active Users Today',    today: filledDAU.at(-1).value,       yest: filledDAU.at(-2).value,       color: CHART_COLORS[2] },
+    { label: 'Coins Won Today',       today: filledCoinsWon.at(-1).value,  yest: filledCoinsWon.at(-2).value,  color: CHART_COLORS[5] },
+    { label: 'Coins Transferred Today', today: filledCoinsXfer.at(-1).value, yest: filledCoinsXfer.at(-2).value, color: CHART_COLORS[3] },
+    { label: 'Transfers Today',
+      today: (dateMap[todayLabel]?.success || 0) + (dateMap[todayLabel]?.failed || 0),
+      yest:  (dateMap[yestLabel]?.success  || 0) + (dateMap[yestLabel]?.failed  || 0),
+      sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
+      color: '#38bdf8' },
+  ];
+  document.getElementById('overviewCards').insertAdjacentHTML('beforeend',
+    ddrMetrics.map(m => {
+      const d = ddrTag(m.today, m.yest);
+      return `
+        <div class="stat-card" style="border-top:3px solid ${m.color}">
+          <p class="stat-label">${m.label}</p>
+          <p class="stat-value" style="color:${m.color}">${Number(m.today).toLocaleString()}</p>
+          <p class="stat-sub ${d.cls}">${d.text}</p>
+          ${m.sub ? `<p class="stat-sub" style="margin-top:2px;font-size:0.72rem">${m.sub}</p>` : ''}
+        </div>`;
+    }).join('')
+  );
   makeStackedBarChart('chartTransfers', tDates.map(d => d.label), [
     { label: 'Success', data: tDates.map(d => dateMap[d.label]?.success || 0), backgroundColor: '#10b981cc', borderRadius: 2 },
     { label: 'Failed', data: tDates.map(d => dateMap[d.label]?.failed || 0), backgroundColor: '#f43f5ecc', borderRadius: 2 },
