@@ -235,8 +235,13 @@ app.post('/api/players/:mobileNumber/dismiss-notification', async (req, res) => 
   }
 });
 
-// serve admin panel
-app.get('/admin', (_req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
+// serve admin panel — never cache HTML so versioned JS/CSS always loads fresh
+app.get('/admin', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.sendFile(path.join(publicDir, 'admin.html'));
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 
