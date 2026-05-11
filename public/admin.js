@@ -24,6 +24,24 @@ const API = {
   },
 };
 
+// ── Theme ─────────────────────────────────────────────────────────────────────
+(function initTheme() {
+  if (localStorage.getItem('admin_theme') === 'light') {
+    document.body.classList.add('light');
+  }
+})();
+
+document.getElementById('themeBtn').addEventListener('click', () => {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('admin_theme', isLight ? 'light' : 'dark');
+  document.getElementById('themeBtn').textContent = isLight ? '🌙 Dark' : '☀️ Light';
+});
+
+// set correct label on load
+if (document.body.classList.contains('light')) {
+  document.getElementById('themeBtn').textContent = '🌙 Dark';
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 document.getElementById('loginBtn').addEventListener('click', async () => {
   const username = document.getElementById('adminUser').value.trim();
@@ -176,7 +194,7 @@ let cachedStats = null;
 async function loadVisual() {
   const [stats, ddr] = await Promise.all([
     API.get('/api/admin/stats'),
-    API.get('/api/admin/ddr'),
+    API.get('/api/admin/ddr').catch(() => null),
   ]);
   cachedStats = stats;
 
@@ -228,30 +246,32 @@ async function loadVisual() {
 
   // DDR cards — today vs same time yesterday (accurate same-window comparison)
   const todayLabel = tDates.at(-1).label;
-  const ddrMetrics = [
-    { label: 'Spins Today',             today: Number(ddr.spins_today),         yest: Number(ddr.spins_yest_sametime),       color: CHART_COLORS[0] },
-    { label: 'New Players Today',       today: Number(ddr.new_players_today),   yest: Number(ddr.new_players_yest_sametime), color: CHART_COLORS[1] },
-    { label: 'Active Users Today',      today: Number(ddr.dau_today),           yest: Number(ddr.dau_yest_sametime),         color: CHART_COLORS[2] },
-    { label: 'Coins Won Today',         today: Number(ddr.coins_today),         yest: Number(ddr.coins_yest_sametime),       color: CHART_COLORS[5] },
-    { label: 'Coins Transferred Today', today: Number(ddr.xfer_coins_today),    yest: Number(ddr.xfer_coins_yest_sametime),  color: CHART_COLORS[3] },
-    { label: 'Transfers Today',
-      today: Number(ddr.xfer_count_today),
-      yest:  Number(ddr.xfer_count_yest_sametime),
-      sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
-      color: '#38bdf8' },
-  ];
-  document.getElementById('overviewCards').insertAdjacentHTML('beforeend',
-    ddrMetrics.map(m => {
-      const d = ddrTag(m.today, m.yest);
-      return `
-        <div class="stat-card" style="border-top:3px solid ${m.color}">
-          <p class="stat-label">${m.label}</p>
-          <p class="stat-value" style="color:${m.color}">${Number(m.today).toLocaleString()}</p>
-          <p class="stat-sub ${d.cls}">${d.text}</p>
-          ${m.sub ? `<p class="stat-sub" style="margin-top:2px;font-size:0.72rem">${m.sub}</p>` : ''}
-        </div>`;
-    }).join('')
-  );
+  if (ddr) {
+    const ddrMetrics = [
+      { label: 'Spins Today',             today: Number(ddr.spins_today),         yest: Number(ddr.spins_yest_sametime),       color: CHART_COLORS[0] },
+      { label: 'New Players Today',       today: Number(ddr.new_players_today),   yest: Number(ddr.new_players_yest_sametime), color: CHART_COLORS[1] },
+      { label: 'Active Users Today',      today: Number(ddr.dau_today),           yest: Number(ddr.dau_yest_sametime),         color: CHART_COLORS[2] },
+      { label: 'Coins Won Today',         today: Number(ddr.coins_today),         yest: Number(ddr.coins_yest_sametime),       color: CHART_COLORS[5] },
+      { label: 'Coins Transferred Today', today: Number(ddr.xfer_coins_today),    yest: Number(ddr.xfer_coins_yest_sametime),  color: CHART_COLORS[3] },
+      { label: 'Transfers Today',
+        today: Number(ddr.xfer_count_today),
+        yest:  Number(ddr.xfer_count_yest_sametime),
+        sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
+        color: '#38bdf8' },
+    ];
+    document.getElementById('overviewCards').insertAdjacentHTML('beforeend',
+      ddrMetrics.map(m => {
+        const d = ddrTag(m.today, m.yest);
+        return `
+          <div class="stat-card" style="border-top:3px solid ${m.color}">
+            <p class="stat-label">${m.label}</p>
+            <p class="stat-value" style="color:${m.color}">${Number(m.today).toLocaleString()}</p>
+            <p class="stat-sub ${d.cls}">${d.text}</p>
+            ${m.sub ? `<p class="stat-sub" style="margin-top:2px;font-size:0.72rem">${m.sub}</p>` : ''}
+          </div>`;
+      }).join('')
+    );
+  }
   makeStackedBarChart('chartTransfers', tDates.map(d => d.label), [
     { label: 'Success', data: tDates.map(d => dateMap[d.label]?.success || 0), backgroundColor: '#10b981cc', borderRadius: 2 },
     { label: 'Failed', data: tDates.map(d => dateMap[d.label]?.failed || 0), backgroundColor: '#f43f5ecc', borderRadius: 2 },
@@ -453,14 +473,12 @@ function renderFailedTable(rows) {
 async function retrySingle(id, btn) {
   btn.disabled = true;
   btn.textContent = '...';
-  const statusEl = document.getElementById('retryStatus');
   try {
     const result = await API.post(`/api/admin/transfers/${id}/retry`);
     if (result.success) {
       const row = document.getElementById(`frow-${id}`);
-      if (row) row.style.opacity = '0.4';
-      btn.textContent = '✓ Done';
-      showRetryStatus(`✅ Transfer ${id} retried — ${result.coins} coins sent`, 'success');
+      if (row) row.remove();
+      showRetryStatus(`✅ Transfer ${id} — ${result.coins} coins sent`, 'success');
     } else {
       btn.textContent = 'Retry';
       btn.disabled = false;
@@ -475,19 +493,40 @@ async function retrySingle(id, btn) {
 
 document.getElementById('retryAllBtn').addEventListener('click', async () => {
   const mobile = document.getElementById('ftMobileFilter').value.trim();
-  if (!confirm(`Retry ALL failed transfers${mobile ? ` for ${mobile}` : ''}? This will attempt to transfer current wallet balances.`)) return;
-  setLoading(true);
-  try {
-    const { results } = await API.post('/api/admin/retry-all', { mobile: mobile || null });
-    const succeeded = results.filter(r => r.success);
-    const failed = results.filter(r => !r.success);
-    showRetryAllSummary(succeeded, failed);
-    await loadFailedTransfers({ mobile });
-  } catch (err) {
-    showRetryStatus(`❌ Error: ${err.message}`, 'error');
-  } finally {
-    setLoading(false);
+  const rows = [...document.querySelectorAll('#failedTable tbody tr[id^="frow-"]')];
+  const ids = rows.map(r => Number(r.id.replace('frow-', ''))).filter(Boolean);
+  if (!ids.length) return;
+  if (!confirm(`Retry ${ids.length} failed transfers${mobile ? ` for ${mobile}` : ''}? This will attempt to transfer current wallet balances.`)) return;
+
+  const statusEl = document.getElementById('retryStatus');
+  statusEl.innerHTML = `⏳ Retrying 0 / ${ids.length}...`;
+  statusEl.className = 'retry-status success';
+  statusEl.classList.remove('hidden');
+
+  const BATCH = 10;
+  const succeeded = [];
+  const failed = [];
+
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH);
+    await Promise.all(batch.map(async id => {
+      try {
+        const result = await API.post(`/api/admin/transfers/${id}/retry`);
+        if (result.success) {
+          succeeded.push(result);
+          const row = document.getElementById(`frow-${id}`);
+          if (row) row.remove();
+        } else {
+          failed.push({ id, ...result });
+        }
+      } catch (e) {
+        failed.push({ id, reason: e.message });
+      }
+    }));
+    statusEl.innerHTML = `⏳ Retrying ${Math.min(i + BATCH, ids.length)} / ${ids.length} — ✅ ${succeeded.length} done`;
   }
+
+  showRetryAllSummary(succeeded, failed);
 });
 
 // ── Cohort Retention ──────────────────────────────────────────────────────────
