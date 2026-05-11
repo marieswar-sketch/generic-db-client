@@ -963,3 +963,83 @@ export async function getCohortRetention(date) {
   `, [date]);
   return rows[0] || { cohort_size: 0 };
 }
+
+export async function getDDRStats() {
+  const { rows: spinRows } = await runQuery(`
+    WITH
+      now_ist     AS (SELECT NOW() AT TIME ZONE 'Asia/Kolkata' AS t),
+      today_start AS (SELECT DATE_TRUNC('day', t) AS d FROM now_ist),
+      yest_start  AS (SELECT d - INTERVAL '1 day' AS d FROM today_start),
+      elapsed     AS (SELECT t - d AS e FROM now_ist, today_start)
+    SELECT
+      COUNT(*) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM today_start)
+      ) AS spins_today,
+      COUNT(*) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM yest_start)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') < (SELECT d FROM yest_start) + (SELECT e FROM elapsed)
+      ) AS spins_yest_sametime,
+      COALESCE(SUM(coins_won) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM today_start)
+      ), 0) AS coins_today,
+      COALESCE(SUM(coins_won) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM yest_start)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') < (SELECT d FROM yest_start) + (SELECT e FROM elapsed)
+      ), 0) AS coins_yest_sametime,
+      COUNT(DISTINCT player_id) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM today_start)
+      ) AS dau_today,
+      COUNT(DISTINCT player_id) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM yest_start)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') < (SELECT d FROM yest_start) + (SELECT e FROM elapsed)
+      ) AS dau_yest_sametime
+    FROM spin_events
+  `);
+
+  const { rows: playerRows } = await runQuery(`
+    WITH
+      now_ist     AS (SELECT NOW() AT TIME ZONE 'Asia/Kolkata' AS t),
+      today_start AS (SELECT DATE_TRUNC('day', t) AS d FROM now_ist),
+      yest_start  AS (SELECT d - INTERVAL '1 day' AS d FROM today_start),
+      elapsed     AS (SELECT t - d AS e FROM now_ist, today_start)
+    SELECT
+      COUNT(*) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM today_start)
+      ) AS new_players_today,
+      COUNT(*) FILTER (
+        WHERE (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM yest_start)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') < (SELECT d FROM yest_start) + (SELECT e FROM elapsed)
+      ) AS new_players_yest_sametime
+    FROM players
+  `);
+
+  const { rows: xferRows } = await runQuery(`
+    WITH
+      now_ist     AS (SELECT NOW() AT TIME ZONE 'Asia/Kolkata' AS t),
+      today_start AS (SELECT DATE_TRUNC('day', t) AS d FROM now_ist),
+      yest_start  AS (SELECT d - INTERVAL '1 day' AS d FROM today_start),
+      elapsed     AS (SELECT t - d AS e FROM now_ist, today_start)
+    SELECT
+      COALESCE(SUM(coins_requested) FILTER (
+        WHERE status = ANY($1)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM today_start)
+      ), 0) AS xfer_coins_today,
+      COALESCE(SUM(coins_requested) FILTER (
+        WHERE status = ANY($1)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM yest_start)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') < (SELECT d FROM yest_start) + (SELECT e FROM elapsed)
+      ), 0) AS xfer_coins_yest_sametime,
+      COUNT(*) FILTER (
+        WHERE status = ANY($1)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM today_start)
+      ) AS xfer_count_today,
+      COUNT(*) FILTER (
+        WHERE status = ANY($1)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') >= (SELECT d FROM yest_start)
+          AND (created_at AT TIME ZONE 'Asia/Kolkata') < (SELECT d FROM yest_start) + (SELECT e FROM elapsed)
+      ) AS xfer_count_yest_sametime
+    FROM transfer_requests
+  `, [COUNTED_TRANSFER_STATUSES]);
+
+  return { ...spinRows[0], ...playerRows[0], ...xferRows[0] };
+}

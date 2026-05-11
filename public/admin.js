@@ -102,11 +102,12 @@ function downloadCSV(data, filename) {
 
 // ── DDR helper ────────────────────────────────────────────────────────────────
 function ddrTag(today, yesterday) {
-  if (!yesterday) return { text: '→ No data yesterday', cls: 'ddr-flat' };
+  if (!yesterday) return { text: '→ No data (same time yesterday)', cls: 'ddr-flat' };
   const pct = Math.round(((today - yesterday) / yesterday) * 100);
-  if (pct > 0) return { text: `↑ +${pct}% vs ${Number(yesterday).toLocaleString()}`, cls: 'ddr-up' };
-  if (pct < 0) return { text: `↓ ${pct}% vs ${Number(yesterday).toLocaleString()}`, cls: 'ddr-down' };
-  return { text: `→ Same as yesterday (${Number(yesterday).toLocaleString()})`, cls: 'ddr-flat' };
+  const yestStr = `${Number(yesterday).toLocaleString()} (same time yesterday)`;
+  if (pct > 0) return { text: `↑ +${pct}% vs ${yestStr}`, cls: 'ddr-up' };
+  if (pct < 0) return { text: `↓ ${pct}% vs ${yestStr}`, cls: 'ddr-down' };
+  return { text: `→ Same — ${yestStr}`, cls: 'ddr-flat' };
 }
 
 // ── Chart helpers ─────────────────────────────────────────────────────────────
@@ -173,7 +174,10 @@ function makeStackedBarChart(canvasId, labels, datasets) {
 let cachedStats = null;
 
 async function loadVisual() {
-  const stats = await API.get('/api/admin/stats');
+  const [stats, ddr] = await Promise.all([
+    API.get('/api/admin/stats'),
+    API.get('/api/admin/ddr'),
+  ]);
   cachedStats = stats;
 
   // Overview cards
@@ -222,18 +226,17 @@ async function loadVisual() {
   }
   const tDates = fillDates([], 'date', 'count');
 
-  // DDR cards — today vs yesterday for each metric
+  // DDR cards — today vs same time yesterday (accurate same-window comparison)
   const todayLabel = tDates.at(-1).label;
-  const yestLabel  = tDates.at(-2).label;
   const ddrMetrics = [
-    { label: 'Spins Today',           today: filledSpins.at(-1).value,     yest: filledSpins.at(-2).value,     color: CHART_COLORS[0] },
-    { label: 'New Players Today',     today: filledPlayers.at(-1).value,   yest: filledPlayers.at(-2).value,   color: CHART_COLORS[1] },
-    { label: 'Active Users Today',    today: filledDAU.at(-1).value,       yest: filledDAU.at(-2).value,       color: CHART_COLORS[2] },
-    { label: 'Coins Won Today',       today: filledCoinsWon.at(-1).value,  yest: filledCoinsWon.at(-2).value,  color: CHART_COLORS[5] },
-    { label: 'Coins Transferred Today', today: filledCoinsXfer.at(-1).value, yest: filledCoinsXfer.at(-2).value, color: CHART_COLORS[3] },
+    { label: 'Spins Today',             today: Number(ddr.spins_today),         yest: Number(ddr.spins_yest_sametime),       color: CHART_COLORS[0] },
+    { label: 'New Players Today',       today: Number(ddr.new_players_today),   yest: Number(ddr.new_players_yest_sametime), color: CHART_COLORS[1] },
+    { label: 'Active Users Today',      today: Number(ddr.dau_today),           yest: Number(ddr.dau_yest_sametime),         color: CHART_COLORS[2] },
+    { label: 'Coins Won Today',         today: Number(ddr.coins_today),         yest: Number(ddr.coins_yest_sametime),       color: CHART_COLORS[5] },
+    { label: 'Coins Transferred Today', today: Number(ddr.xfer_coins_today),    yest: Number(ddr.xfer_coins_yest_sametime),  color: CHART_COLORS[3] },
     { label: 'Transfers Today',
-      today: (dateMap[todayLabel]?.success || 0) + (dateMap[todayLabel]?.failed || 0),
-      yest:  (dateMap[yestLabel]?.success  || 0) + (dateMap[yestLabel]?.failed  || 0),
+      today: Number(ddr.xfer_count_today),
+      yest:  Number(ddr.xfer_count_yest_sametime),
       sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
       color: '#38bdf8' },
   ];
