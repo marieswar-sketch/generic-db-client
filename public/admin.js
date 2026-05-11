@@ -119,13 +119,13 @@ function downloadCSV(data, filename) {
 }
 
 // ── DDR helper ────────────────────────────────────────────────────────────────
-function ddrTag(today, yesterday) {
-  if (!yesterday) return { text: '→ No data (same time yesterday)', cls: 'ddr-flat' };
+function ddrTag(today, yesterday, label = 'yesterday') {
+  if (!yesterday) return { text: `→ No data ${label}`, cls: 'ddr-flat' };
   const pct = Math.round(((today - yesterday) / yesterday) * 100);
-  const yestStr = `${Number(yesterday).toLocaleString()} (same time yesterday)`;
+  const yestStr = `${Number(yesterday).toLocaleString()} (${label})`;
   if (pct > 0) return { text: `↑ +${pct}% vs ${yestStr}`, cls: 'ddr-up' };
   if (pct < 0) return { text: `↓ ${pct}% vs ${yestStr}`, cls: 'ddr-down' };
-  return { text: `→ Same — ${yestStr}`, cls: 'ddr-flat' };
+  return { text: `→ Same as ${label} (${Number(yesterday).toLocaleString()})`, cls: 'ddr-flat' };
 }
 
 // ── Chart helpers ─────────────────────────────────────────────────────────────
@@ -244,34 +244,45 @@ async function loadVisual() {
   }
   const tDates = fillDates([], 'date', 'count');
 
-  // DDR cards — today vs same time yesterday (accurate same-window comparison)
+  // DDR cards — today vs same time yesterday if endpoint available, else vs yesterday full day
   const todayLabel = tDates.at(-1).label;
-  if (ddr) {
-    const ddrMetrics = [
-      { label: 'Spins Today',             today: Number(ddr.spins_today),         yest: Number(ddr.spins_yest_sametime),       color: CHART_COLORS[0] },
-      { label: 'New Players Today',       today: Number(ddr.new_players_today),   yest: Number(ddr.new_players_yest_sametime), color: CHART_COLORS[1] },
-      { label: 'Active Users Today',      today: Number(ddr.dau_today),           yest: Number(ddr.dau_yest_sametime),         color: CHART_COLORS[2] },
-      { label: 'Coins Won Today',         today: Number(ddr.coins_today),         yest: Number(ddr.coins_yest_sametime),       color: CHART_COLORS[5] },
-      { label: 'Coins Transferred Today', today: Number(ddr.xfer_coins_today),    yest: Number(ddr.xfer_coins_yest_sametime),  color: CHART_COLORS[3] },
-      { label: 'Transfers Today',
-        today: Number(ddr.xfer_count_today),
-        yest:  Number(ddr.xfer_count_yest_sametime),
-        sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
-        color: '#38bdf8' },
-    ];
-    document.getElementById('overviewCards').insertAdjacentHTML('beforeend',
-      ddrMetrics.map(m => {
-        const d = ddrTag(m.today, m.yest);
-        return `
-          <div class="stat-card" style="border-top:3px solid ${m.color}">
-            <p class="stat-label">${m.label}</p>
-            <p class="stat-value" style="color:${m.color}">${Number(m.today).toLocaleString()}</p>
-            <p class="stat-sub ${d.cls}">${d.text}</p>
-            ${m.sub ? `<p class="stat-sub" style="margin-top:2px;font-size:0.72rem">${m.sub}</p>` : ''}
-          </div>`;
-      }).join('')
-    );
-  }
+  const yestLabel  = tDates.at(-2).label;
+  const ddrMetrics = ddr ? [
+    { label: 'Spins Today',             today: Number(ddr.spins_today),         yest: Number(ddr.spins_yest_sametime),       color: CHART_COLORS[0] },
+    { label: 'New Players Today',       today: Number(ddr.new_players_today),   yest: Number(ddr.new_players_yest_sametime), color: CHART_COLORS[1] },
+    { label: 'Active Users Today',      today: Number(ddr.dau_today),           yest: Number(ddr.dau_yest_sametime),         color: CHART_COLORS[2] },
+    { label: 'Coins Won Today',         today: Number(ddr.coins_today),         yest: Number(ddr.coins_yest_sametime),       color: CHART_COLORS[5] },
+    { label: 'Coins Transferred Today', today: Number(ddr.xfer_coins_today),    yest: Number(ddr.xfer_coins_yest_sametime),  color: CHART_COLORS[3] },
+    { label: 'Transfers Today',
+      today: Number(ddr.xfer_count_today),
+      yest:  Number(ddr.xfer_count_yest_sametime),
+      sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
+      color: '#38bdf8' },
+  ] : [
+    { label: 'Spins Today',             today: filledSpins.at(-1).value,      yest: filledSpins.at(-2).value,      color: CHART_COLORS[0] },
+    { label: 'New Players Today',       today: filledPlayers.at(-1).value,    yest: filledPlayers.at(-2).value,    color: CHART_COLORS[1] },
+    { label: 'Active Users Today',      today: filledDAU.at(-1).value,        yest: filledDAU.at(-2).value,        color: CHART_COLORS[2] },
+    { label: 'Coins Won Today',         today: filledCoinsWon.at(-1).value,   yest: filledCoinsWon.at(-2).value,   color: CHART_COLORS[5] },
+    { label: 'Coins Transferred Today', today: filledCoinsXfer.at(-1).value,  yest: filledCoinsXfer.at(-2).value,  color: CHART_COLORS[3] },
+    { label: 'Transfers Today',
+      today: (dateMap[todayLabel]?.success || 0) + (dateMap[todayLabel]?.failed || 0),
+      yest:  (dateMap[yestLabel]?.success  || 0) + (dateMap[yestLabel]?.failed  || 0),
+      sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
+      color: '#38bdf8' },
+  ];
+  const ddrLabel = ddr ? 'same time yesterday' : 'yesterday';
+  document.getElementById('overviewCards').insertAdjacentHTML('beforeend',
+    ddrMetrics.map(m => {
+      const d = ddrTag(m.today, m.yest, ddrLabel);
+      return `
+        <div class="stat-card" style="border-top:3px solid ${m.color}">
+          <p class="stat-label">${m.label}</p>
+          <p class="stat-value" style="color:${m.color}">${Number(m.today).toLocaleString()}</p>
+          <p class="stat-sub ${d.cls}">${d.text}</p>
+          ${m.sub ? `<p class="stat-sub" style="margin-top:2px;font-size:0.72rem">${m.sub}</p>` : ''}
+        </div>`;
+    }).join('')
+  );
   makeStackedBarChart('chartTransfers', tDates.map(d => d.label), [
     { label: 'Success', data: tDates.map(d => dateMap[d.label]?.success || 0), backgroundColor: '#10b981cc', borderRadius: 2 },
     { label: 'Failed', data: tDates.map(d => dateMap[d.label]?.failed || 0), backgroundColor: '#f43f5ecc', borderRadius: 2 },
