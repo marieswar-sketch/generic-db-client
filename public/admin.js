@@ -283,19 +283,19 @@ async function loadVisual() {
   }
   const tDates = fillDates([], 'date', 'count');
 
-  // DDR chart cards — 30-day bars with today highlighted
+  // DDR chart cards — same-time-of-day comparison for last 7 days
   const todayLabel = tDates.at(-1).label;
   const yestLabel  = tDates.at(-2).label;
-  makeDDRChart('ddrSpins',     'Spins',               filledSpins,     CHART_COLORS[0]);
-  makeDDRChart('ddrPlayers',   'New Players',          filledPlayers,   CHART_COLORS[1]);
-  makeDDRChart('ddrDAU',       'Active Users',         filledDAU,       CHART_COLORS[2]);
-  makeDDRChart('ddrCoinsWon',  'Coins Won',            filledCoinsWon,  CHART_COLORS[5]);
-  makeDDRChart('ddrCoinsXfer', 'Coins Transferred',    filledCoinsXfer, CHART_COLORS[3]);
-  const filledTransferSuccess = fillDates(
-    charts.dailyTransfers.filter(r => ['success','mock_success','submitted'].includes(r.status)),
-    'date', 'count'
-  );
-  makeDDRChart('ddrTransfers', 'Transfers (Success)', filledTransferSuccess, '#38bdf8');
+  const ddrSeries = await API.get('/api/admin/ddr-series').catch(() => null);
+  if (ddrSeries && ddrSeries.length) {
+    const toFilled = (key) => ddrSeries.map(r => ({ label: r.date, value: r[key] || 0 }));
+    makeDDRChart('ddrSpins',     'Spins (same time)',               toFilled('spins'),             CHART_COLORS[0]);
+    makeDDRChart('ddrPlayers',   'New Players (same time)',          toFilled('new_players'),       CHART_COLORS[1]);
+    makeDDRChart('ddrDAU',       'Active Users (same time)',         toFilled('active_users'),      CHART_COLORS[2]);
+    makeDDRChart('ddrCoinsWon',  'Coins Won (same time)',            toFilled('coins_won'),         CHART_COLORS[5]);
+    makeDDRChart('ddrCoinsXfer', 'Coins Transferred (same time)',    toFilled('coins_transferred'), CHART_COLORS[3]);
+    makeDDRChart('ddrTransfers', 'Transfers Success (same time)',    toFilled('transfers_success'), '#38bdf8');
+  }
 
   makeStackedBarChart('chartTransfers', tDates.map(d => d.label), [
     { label: 'Success', data: tDates.map(d => dateMap[d.label]?.success || 0), backgroundColor: '#10b981cc', borderRadius: 2 },
