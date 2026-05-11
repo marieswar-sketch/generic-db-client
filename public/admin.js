@@ -10,13 +10,17 @@ const API = {
   },
   async get(path) {
     const res = await fetch(path, { headers: this.headers() });
-    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-    return res.json();
+    let data;
+    try { data = await res.json(); } catch { throw new Error(`Server error ${res.status} — possibly timed out. Try again.`); }
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
   },
   async post(path, body = {}) {
     const res = await fetch(path, { method: 'POST', headers: this.headers(), body: JSON.stringify(body) });
-    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-    return res.json();
+    let data;
+    try { data = await res.json(); } catch { throw new Error(`Server error ${res.status} — possibly timed out. Try again.`); }
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    return data;
   },
 };
 
