@@ -168,6 +168,36 @@ function makePieChart(canvasId, labels, values) {
   });
 }
 
+function makeDDRChart(canvasId, title, todayVal, yestVal, color) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  if (ctx._chart) ctx._chart.destroy();
+  const pct = yestVal ? Math.round(((todayVal - yestVal) / yestVal) * 100) : null;
+  const pctLabel = pct === null ? '' : pct > 0 ? ` ↑ +${pct}%` : pct < 0 ? ` ↓ ${pct}%` : ' → same';
+  ctx._chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [`Today${pctLabel}`, 'Yesterday'],
+      datasets: [{
+        data: [todayVal, yestVal],
+        backgroundColor: [color + 'cc', color + '33'],
+        borderRadius: 6,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: title, color: '#e2e8f0', font: { size: 13, weight: '600' }, padding: { bottom: 12 } },
+      },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+        y: { ticks: { color: '#94a3b8' }, beginAtZero: true, grid: { color: '#334155' } },
+      },
+    },
+  });
+}
+
 function makeStackedBarChart(canvasId, labels, datasets) {
   const ctx = document.getElementById(canvasId);
   if (ctx._chart) ctx._chart.destroy();
@@ -231,33 +261,19 @@ async function loadVisual() {
   }
   const tDates = fillDates([], 'date', 'count');
 
-  // DDR cards — today vs yesterday (using daily chart data, no extra endpoint needed)
+  // DDR chart cards — today vs yesterday
   const todayLabel = tDates.at(-1).label;
   const yestLabel  = tDates.at(-2).label;
-  const ddrMetrics = [
-    { label: 'Spins Today',             today: filledSpins.at(-1).value,      yest: filledSpins.at(-2).value,      color: CHART_COLORS[0] },
-    { label: 'New Players Today',       today: filledPlayers.at(-1).value,    yest: filledPlayers.at(-2).value,    color: CHART_COLORS[1] },
-    { label: 'Active Users Today',      today: filledDAU.at(-1).value,        yest: filledDAU.at(-2).value,        color: CHART_COLORS[2] },
-    { label: 'Coins Won Today',         today: filledCoinsWon.at(-1).value,   yest: filledCoinsWon.at(-2).value,   color: CHART_COLORS[5] },
-    { label: 'Coins Transferred Today', today: filledCoinsXfer.at(-1).value,  yest: filledCoinsXfer.at(-2).value,  color: CHART_COLORS[3] },
-    { label: 'Transfers Today',
-      today: (dateMap[todayLabel]?.success || 0) + (dateMap[todayLabel]?.failed || 0),
-      yest:  (dateMap[yestLabel]?.success  || 0) + (dateMap[yestLabel]?.failed  || 0),
-      sub: `✅ ${dateMap[todayLabel]?.success || 0} success · ❌ ${dateMap[todayLabel]?.failed || 0} failed`,
-      color: '#38bdf8' },
-  ];
-  document.getElementById('overviewCards').insertAdjacentHTML('beforeend',
-    ddrMetrics.map(m => {
-      const d = ddrTag(m.today, m.yest);
-      return `
-        <div class="stat-card" style="border-top:3px solid ${m.color}">
-          <p class="stat-label">${m.label}</p>
-          <p class="stat-value" style="color:${m.color}">${Number(m.today).toLocaleString()}</p>
-          <p class="stat-sub ${d.cls}">${d.text}</p>
-          ${m.sub ? `<p class="stat-sub" style="margin-top:2px;font-size:0.72rem">${m.sub}</p>` : ''}
-        </div>`;
-    }).join('')
-  );
+  makeDDRChart('ddrSpins',     'Spins',               filledSpins.at(-1).value,     filledSpins.at(-2).value,     CHART_COLORS[0]);
+  makeDDRChart('ddrPlayers',   'New Players',          filledPlayers.at(-1).value,   filledPlayers.at(-2).value,   CHART_COLORS[1]);
+  makeDDRChart('ddrDAU',       'Active Users',         filledDAU.at(-1).value,       filledDAU.at(-2).value,       CHART_COLORS[2]);
+  makeDDRChart('ddrCoinsWon',  'Coins Won',            filledCoinsWon.at(-1).value,  filledCoinsWon.at(-2).value,  CHART_COLORS[5]);
+  makeDDRChart('ddrCoinsXfer', 'Coins Transferred',    filledCoinsXfer.at(-1).value, filledCoinsXfer.at(-2).value, CHART_COLORS[3]);
+  makeDDRChart('ddrTransfers', 'Transfers (Success)',
+    dateMap[todayLabel]?.success || 0,
+    dateMap[yestLabel]?.success  || 0,
+    '#38bdf8');
+
   makeStackedBarChart('chartTransfers', tDates.map(d => d.label), [
     { label: 'Success', data: tDates.map(d => dateMap[d.label]?.success || 0), backgroundColor: '#10b981cc', borderRadius: 2 },
     { label: 'Failed', data: tDates.map(d => dateMap[d.label]?.failed || 0), backgroundColor: '#f43f5ecc', borderRadius: 2 },
