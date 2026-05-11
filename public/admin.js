@@ -168,20 +168,31 @@ function makePieChart(canvasId, labels, values) {
   });
 }
 
-function makeDDRChart(canvasId, title, todayVal, yestVal, color) {
+function makeDDRChart(canvasId, title, filledData, color) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return;
   if (ctx._chart) ctx._chart.destroy();
+  const todayVal = filledData.at(-1).value;
+  const yestVal  = filledData.at(-2).value;
   const pct = yestVal ? Math.round(((todayVal - yestVal) / yestVal) * 100) : null;
   const pctLabel = pct === null ? '' : pct > 0 ? ` ↑ +${pct}%` : pct < 0 ? ` ↓ ${pct}%` : ' → same';
+
+  const labels = filledData.map((d, i) => {
+    if (i === filledData.length - 1) return `Today${pctLabel}`;
+    return d.label.slice(5); // MM-DD
+  });
+  const bgColors = filledData.map((d, i) =>
+    i === filledData.length - 1 ? color + 'ee' : color + '44'
+  );
+
   ctx._chart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: [`Today${pctLabel}`, 'Yesterday'],
+      labels,
       datasets: [{
-        data: [todayVal, yestVal],
-        backgroundColor: [color + 'cc', color + '33'],
-        borderRadius: 6,
+        data: filledData.map(d => d.value),
+        backgroundColor: bgColors,
+        borderRadius: 3,
       }],
     },
     options: {
@@ -189,9 +200,20 @@ function makeDDRChart(canvasId, title, todayVal, yestVal, color) {
       plugins: {
         legend: { display: false },
         title: { display: true, text: title, color: '#e2e8f0', font: { size: 13, weight: '600' }, padding: { bottom: 12 } },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0].label,
+            label: (item) => {
+              const isToday = item.dataIndex === filledData.length - 1;
+              return isToday
+                ? `${Number(item.raw).toLocaleString()} (today so far)`
+                : Number(item.raw).toLocaleString();
+            },
+          },
+        },
       },
       scales: {
-        x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+        x: { ticks: { color: '#94a3b8', maxTicksLimit: 8 }, grid: { display: false } },
         y: { ticks: { color: '#94a3b8' }, beginAtZero: true, grid: { color: '#334155' } },
       },
     },
@@ -261,18 +283,19 @@ async function loadVisual() {
   }
   const tDates = fillDates([], 'date', 'count');
 
-  // DDR chart cards — today vs yesterday
+  // DDR chart cards — 30-day bars with today highlighted
   const todayLabel = tDates.at(-1).label;
   const yestLabel  = tDates.at(-2).label;
-  makeDDRChart('ddrSpins',     'Spins',               filledSpins.at(-1).value,     filledSpins.at(-2).value,     CHART_COLORS[0]);
-  makeDDRChart('ddrPlayers',   'New Players',          filledPlayers.at(-1).value,   filledPlayers.at(-2).value,   CHART_COLORS[1]);
-  makeDDRChart('ddrDAU',       'Active Users',         filledDAU.at(-1).value,       filledDAU.at(-2).value,       CHART_COLORS[2]);
-  makeDDRChart('ddrCoinsWon',  'Coins Won',            filledCoinsWon.at(-1).value,  filledCoinsWon.at(-2).value,  CHART_COLORS[5]);
-  makeDDRChart('ddrCoinsXfer', 'Coins Transferred',    filledCoinsXfer.at(-1).value, filledCoinsXfer.at(-2).value, CHART_COLORS[3]);
-  makeDDRChart('ddrTransfers', 'Transfers (Success)',
-    dateMap[todayLabel]?.success || 0,
-    dateMap[yestLabel]?.success  || 0,
-    '#38bdf8');
+  makeDDRChart('ddrSpins',     'Spins',               filledSpins,     CHART_COLORS[0]);
+  makeDDRChart('ddrPlayers',   'New Players',          filledPlayers,   CHART_COLORS[1]);
+  makeDDRChart('ddrDAU',       'Active Users',         filledDAU,       CHART_COLORS[2]);
+  makeDDRChart('ddrCoinsWon',  'Coins Won',            filledCoinsWon,  CHART_COLORS[5]);
+  makeDDRChart('ddrCoinsXfer', 'Coins Transferred',    filledCoinsXfer, CHART_COLORS[3]);
+  const filledTransferSuccess = fillDates(
+    charts.dailyTransfers.filter(r => ['success','mock_success','submitted'].includes(r.status)),
+    'date', 'count'
+  );
+  makeDDRChart('ddrTransfers', 'Transfers (Success)', filledTransferSuccess, '#38bdf8');
 
   makeStackedBarChart('chartTransfers', tDates.map(d => d.label), [
     { label: 'Success', data: tDates.map(d => dateMap[d.label]?.success || 0), backgroundColor: '#10b981cc', borderRadius: 2 },
