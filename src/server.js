@@ -8,6 +8,7 @@ import {
   getAdminStats,
   getAdminTableData,
   getCohortRetention,
+  getDDRStats,
   getPlayerState,
   getPublicConfig,
   registerPlayer,
@@ -174,6 +175,14 @@ app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
   try {
     const stats = await getAdminStats();
     res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/admin/ddr', requireAdmin, async (_req, res) => {
+  try {
+    res.json(await getDDRStats());
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
