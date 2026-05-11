@@ -284,6 +284,7 @@ async function loadVisual() {
   const tDates = fillDates([], 'date', 'count');
 
   // DDR chart cards — same-time-of-day comparison for last 7 days
+  // Falls back to full-day slice if the endpoint isn't available yet
   const todayLabel = tDates.at(-1).label;
   const yestLabel  = tDates.at(-2).label;
   const ddrSeries = await API.get('/api/admin/ddr-series').catch(() => null);
@@ -295,6 +296,17 @@ async function loadVisual() {
     makeDDRChart('ddrCoinsWon',  'Coins Won (same time)',            toFilled('coins_won'),         CHART_COLORS[5]);
     makeDDRChart('ddrCoinsXfer', 'Coins Transferred (same time)',    toFilled('coins_transferred'), CHART_COLORS[3]);
     makeDDRChart('ddrTransfers', 'Transfers Success (same time)',    toFilled('transfers_success'), '#38bdf8');
+  } else {
+    const filledTransferSuccess = fillDates(
+      charts.dailyTransfers.filter(r => ['success','mock_success','submitted'].includes(r.status)),
+      'date', 'count'
+    );
+    makeDDRChart('ddrSpins',     'Spins',               filledSpins.slice(-7),             CHART_COLORS[0]);
+    makeDDRChart('ddrPlayers',   'New Players',          filledPlayers.slice(-7),           CHART_COLORS[1]);
+    makeDDRChart('ddrDAU',       'Active Users',         filledDAU.slice(-7),               CHART_COLORS[2]);
+    makeDDRChart('ddrCoinsWon',  'Coins Won',            filledCoinsWon.slice(-7),          CHART_COLORS[5]);
+    makeDDRChart('ddrCoinsXfer', 'Coins Transferred',    filledCoinsXfer.slice(-7),         CHART_COLORS[3]);
+    makeDDRChart('ddrTransfers', 'Transfers (Success)',  filledTransferSuccess.slice(-7),   '#38bdf8');
   }
 
   makeStackedBarChart('chartTransfers', tDates.map(d => d.label), [
